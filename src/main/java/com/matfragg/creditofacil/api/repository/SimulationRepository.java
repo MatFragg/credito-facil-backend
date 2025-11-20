@@ -63,9 +63,32 @@ public interface SimulationRepository extends JpaRepository<Simulation, Long> {
     @Query("SELECT AVG(s.propertyPrice) FROM Simulation s WHERE s.client.id = :clientId")
     BigDecimal avgPropertyPriceByClient(@Param("clientId") Long clientId);
     
-    // Bank comparison statistics
-    @Query("SELECT s.bankEntity.id, s.bankEntity.name, COUNT(s), AVG(s.amountToFinance), " +
-           "AVG(s.monthlyPayment), MIN(s.annualRate), MAX(s.annualRate), AVG(s.tcea) " +
-           "FROM Simulation s GROUP BY s.bankEntity.id, s.bankEntity.name ORDER BY COUNT(s) DESC")
+    @Query("""
+    SELECT b.id, b.name, b.currentRate, COUNT(s.id), 
+           AVG(s.amountToFinance), AVG(s.monthlyPayment), 
+           MIN(s.annualRate), MAX(s.annualRate), AVG(s.tcea)
+    FROM Simulation s
+    JOIN s.bankEntity b
+    GROUP BY b.id, b.name, b.currentRate
+    ORDER BY COUNT(s.id) DESC
+    """)
     List<Object[]> getBankComparisonStats();
+
+    @Query("""
+    SELECT s.bankEntity.name, COUNT(s)
+    FROM Simulation s
+    WHERE s.client.id = :clientId
+    GROUP BY s.bankEntity.name
+    ORDER BY COUNT(s) DESC
+    """)
+    List<Object[]> findMostUsedBankByClientId(@Param("clientId") Long clientId);
+
+    @Query("""
+        SELECT s.property.propertyType, COUNT(s)
+        FROM Simulation s
+        WHERE s.client.id = :clientId
+        GROUP BY s.property.propertyType
+        ORDER BY COUNT(s) DESC
+        """)
+    List<Object[]> findMostPopularPropertyTypeByClientId(@Param("clientId") Long clientId);
 }

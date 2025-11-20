@@ -15,8 +15,6 @@ import java.time.LocalDate;
 @Builder
 public class PaymentScheduleResponse {
 
-    private Long id;
-    private Long simulationId;
     private Integer paymentNumber;
     private LocalDate paymentDate;
     private BigDecimal initialBalance;

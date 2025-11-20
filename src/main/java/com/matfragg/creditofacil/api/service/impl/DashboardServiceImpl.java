@@ -45,6 +45,20 @@ public class DashboardServiceImpl implements DashboardService {
         long totalSimulations = simulationRepository.countByClientId(clientId);
         long totalProperties = propertyRepository.findByClientId(clientId).size();
         
+
+        String mostUsedBank = null;
+        List<Object[]> bankStats = simulationRepository.findMostUsedBankByClientId(clientId);
+        if (!bankStats.isEmpty()) {
+            mostUsedBank = bankStats.get(0)[0] != null ? bankStats.get(0)[0].toString() : null;
+        }
+
+        // Most popular property type for client (enum -> string)
+        String mostPopularPropertyType = null;
+        List<Object[]> propStats = simulationRepository.findMostPopularPropertyTypeByClientId(clientId);
+        if (!propStats.isEmpty()) {
+            mostPopularPropertyType = propStats.get(0)[0] != null ? propStats.get(0)[0].toString() : null;
+        }
+
         BigDecimal totalFinanced = simulationRepository.sumFinancedAmountByClient(clientId);
         BigDecimal avgMonthlyPayment = simulationRepository.avgMonthlyPaymentByClient(clientId);
         BigDecimal avgPropertyPrice = simulationRepository.avgPropertyPriceByClient(clientId);
@@ -65,6 +79,8 @@ public class DashboardServiceImpl implements DashboardService {
             .averagePropertyPrice(avgPropertyPrice != null ? avgPropertyPrice : BigDecimal.ZERO)
             .averageDownPayment(BigDecimal.ZERO)
             .averageLoanYears(0)
+            .mostUsedBank(mostUsedBank)
+            .mostPopularPropertyType(mostPopularPropertyType)
             .simulationsThisMonth(simulationsThisMonth)
             .simulationsThisYear(simulationsThisYear)
             .build();
@@ -104,6 +120,12 @@ public class DashboardServiceImpl implements DashboardService {
             mostUsedBank = (String) bankStats.get(0)[0];
         }
         
+        String mostPopularPropertyType = null;
+        List<Object[]> propertyTypeStats = propertyRepository.findMostPopularPropertyType();
+        if (!propertyTypeStats.isEmpty()) {
+            mostPopularPropertyType = (String) propertyTypeStats.get(0)[0].toString();
+        }
+
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
         LocalDateTime startOfYear = now.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0);
@@ -121,6 +143,7 @@ public class DashboardServiceImpl implements DashboardService {
             .averageDownPayment(avgDownPayment != null ? avgDownPayment : BigDecimal.ZERO)
             .averageLoanYears(avgLoanYears != null ? avgLoanYears.intValue() : 0)
             .mostUsedBank(mostUsedBank)
+            .mostPopularPropertyType(mostPopularPropertyType)
             .simulationsThisMonth(simulationsThisMonth)
             .simulationsThisYear(simulationsThisYear)
             .build();
@@ -136,16 +159,18 @@ public class DashboardServiceImpl implements DashboardService {
         for (Object[] stat : stats) {
             Long bankId = ((Number) stat[0]).longValue();
             String bankName = (String) stat[1];
-            Long totalSims = ((Number) stat[2]).longValue();
-            BigDecimal avgFinanced = stat[3] != null ? (BigDecimal) stat[3] : BigDecimal.ZERO;
-            BigDecimal avgPayment = stat[4] != null ? (BigDecimal) stat[4] : BigDecimal.ZERO;
-            BigDecimal minRate = stat[5] != null ? (BigDecimal) stat[5] : BigDecimal.ZERO;
-            BigDecimal maxRate = stat[6] != null ? (BigDecimal) stat[6] : BigDecimal.ZERO;
-            BigDecimal avgTCEA = stat[7] != null ? (BigDecimal) stat[7] : BigDecimal.ZERO;
+            BigDecimal currentRate = stat[2] != null ? BigDecimal.valueOf(((Number) stat[2]).doubleValue()) : null;
+            Long totalSims = ((Number) stat[3]).longValue();
+            BigDecimal avgFinanced = stat[4] != null ? BigDecimal.valueOf(((Number) stat[4]).doubleValue()) : BigDecimal.ZERO;
+            BigDecimal avgPayment = stat[5] != null ? BigDecimal.valueOf(((Number) stat[5]).doubleValue()) : BigDecimal.ZERO;
+            BigDecimal minRate = stat[6] != null ? BigDecimal.valueOf(((Number) stat[6]).doubleValue()) : BigDecimal.ZERO;
+            BigDecimal maxRate = stat[7] != null ? BigDecimal.valueOf(((Number) stat[7]).doubleValue()) : BigDecimal.ZERO;
+            BigDecimal avgTCEA = stat[8] != null ? BigDecimal.valueOf(((Number) stat[8]).doubleValue()) : BigDecimal.ZERO;
             
             comparisons.add(BankComparisonResponse.builder()
                 .bankId(bankId)
                 .bankName(bankName)
+                .currentRate(currentRate)
                 .totalSimulations(totalSims)
                 .averageFinancedAmount(avgFinanced)
                 .averageMonthlyPayment(avgPayment)
@@ -170,6 +195,17 @@ public class DashboardServiceImpl implements DashboardService {
         BigDecimal minPrice = propertyRepository.minPrice();
         BigDecimal maxPrice = propertyRepository.maxPrice();
         
+        String priceRange = (minPrice != null && maxPrice != null) 
+            ? String.format("%s - %s", minPrice.setScale(2, RoundingMode.HALF_UP), maxPrice.setScale(2, RoundingMode.HALF_UP))
+            : null;
+
+        String mostPopularCity = null;
+        long citiesCount = propertyRepository.countDistinctCities(); // may be 0
+        List<Object[]> cityStats = propertyRepository.findMostPopularCity();
+        if (!cityStats.isEmpty()) {
+            mostPopularCity = cityStats.get(0)[0] != null ? cityStats.get(0)[0].toString() : null;
+        }
+
         // Get most popular district
         String mostPopularDistrict = null;
         List<Object[]> districtStats = propertyRepository.findMostPopularDistrict();
@@ -183,7 +219,10 @@ public class DashboardServiceImpl implements DashboardService {
         
         return PropertyTrendsResponse.builder()
             .propertiesCount(totalProperties)
+            .mostPopularCity(mostPopularCity)
+            .citiesCount(citiesCount)
             .mostPopularDistrict(mostPopularDistrict)
+            .priceRange(priceRange)
             .averagePrice(avgPrice != null ? avgPrice : BigDecimal.ZERO)
             .minPrice(minPrice != null ? minPrice : BigDecimal.ZERO)
             .maxPrice(maxPrice != null ? maxPrice : BigDecimal.ZERO)

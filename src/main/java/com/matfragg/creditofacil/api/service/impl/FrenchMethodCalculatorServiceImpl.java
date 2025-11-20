@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 
 @Service
@@ -34,6 +35,11 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
 
         log.debug("Calculando cronograma de pagos para monto: {} a {} años", amountToFinance, termYears);
 
+        Capitalization capitalization = Objects.requireNonNullElse(settings.getCapitalization(), Capitalization.MONTHLY);
+
+        if (settings.getCapitalization() == null) {
+            log.warn("Capitalization era null, asignando MONTHLY por defecto");
+        }
         // Normalizar la tasa (ej: 9.5 -> 0.095)
         BigDecimal annualRateDecimal = annualRate.divide(BigDecimal.valueOf(100), SCALE, RoundingMode.HALF_UP);
 
@@ -41,7 +47,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
         BigDecimal effectiveAnnualRate = convertToEffectiveRate(
                 annualRateDecimal, // Pasa la tasa decimal
                 settings.getInterestRateType(),
-                settings.getCapitalization()
+                capitalization
         );
 
         // Paso 2: Calcular TEM
@@ -126,6 +132,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
 
     @Override
     public int getCapitalizationPeriods(Capitalization capitalization) {
+        log.debug("Capitalization: {}", String.valueOf(capitalization));  // ✅ CAMBIAR A String.valueOf()
         if (capitalization == null) return 12; // Default a mensual si es nulo
         return switch (capitalization) {
             case DAILY -> 360;

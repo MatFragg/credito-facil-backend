@@ -16,15 +16,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/dashboard")
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Dashboard", description = "Dashboard statistics and analytics endpoints")
+@Tag(name = "Statistics", description = "Statistics and analytics endpoints organized as RESTful resources")
 public class DashboardController {
     
     private final DashboardService dashboardService;
     
-    @GetMapping("/my-stats")
-    @PreAuthorize("hasRole('CLIENT')")
+    @GetMapping("/users/me/statistics")
     @Operation(summary = "Get statistics for authenticated client")
     public ResponseEntity<ApiResponse<DashboardStatsResponse>> getMyStatistics() {
         DashboardStatsResponse stats = dashboardService.getMyStatistics();
@@ -36,7 +35,7 @@ public class DashboardController {
             .build());
     }
     
-    @GetMapping("/client/{clientId}/stats")
+    @GetMapping("/clients/{clientId}/statistics")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get statistics for a specific client")
     public ResponseEntity<ApiResponse<DashboardStatsResponse>> getClientStatistics(@PathVariable Long clientId) {
@@ -49,7 +48,7 @@ public class DashboardController {
             .build());
     }
     
-    @GetMapping("/global")
+    @GetMapping("/statistics")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get global platform statistics (ADMIN only)")
     public ResponseEntity<ApiResponse<DashboardStatsResponse>> getGlobalStatistics() {
@@ -62,9 +61,9 @@ public class DashboardController {
             .build());
     }
     
-    @GetMapping("/banks/comparison")
+    @GetMapping("/bank-entities/analytics")
     @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT')")
-    @Operation(summary = "Get bank comparison statistics")
+    @Operation(summary = "Get bank comparison analytics")
     public ResponseEntity<ApiResponse<List<BankComparisonResponse>>> getBankComparison() {
         List<BankComparisonResponse> comparison = dashboardService.getBankComparison();
         
@@ -75,9 +74,9 @@ public class DashboardController {
             .build());
     }
     
-    @GetMapping("/properties/trends")
+    @GetMapping("/properties/analytics")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get property market trends")
+    @Operation(summary = "Get property market trends analytics")
     public ResponseEntity<ApiResponse<PropertyTrendsResponse>> getPropertyTrends() {
         PropertyTrendsResponse trends = dashboardService.getPropertyTrends();
         
@@ -88,9 +87,9 @@ public class DashboardController {
             .build());
     }
     
-    @GetMapping("/monthly-metrics")
+    @GetMapping("/analytics/monthly")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get metrics for a specific month (ADMIN only)")
+    @Operation(summary = "Get monthly analytics (ADMIN only)")
     public ResponseEntity<ApiResponse<MonthlyMetricsResponse>> getMonthlyMetrics(
             @RequestParam int month,
             @RequestParam int year) {

@@ -9,9 +9,13 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,34 +39,17 @@ public class ClientController {
      */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Listar clientes", description = "Lista todos los clientes con paginación (solo ADMIN)")
+    @Operation(summary = "Listar clientes", description = "Lista todos los clientes con paginación (solo ADMIN). Usar query param 'dni' para buscar por DNI.")
     public ResponseEntity<ApiResponse<Page<ClientResponse>>> listClients(
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 10, sort = "createdAt") Pageable pageable,
+            @RequestParam(required = false) String dni) {
+        if (dni != null && !dni.trim().isEmpty()) {
+            ClientResponse client = clientService.findByDni(dni);
+            Page<ClientResponse> singleClientPage = new PageImpl<>(List.of(client), pageable, 1);
+            return ResponseEntity.ok(ApiResponse.success(singleClientPage));
+        }
         Page<ClientResponse> clients = clientService.findAll(pageable);
         return ResponseEntity.ok(ApiResponse.success(clients));
-    }
-
-    /**
-     * Lista clientes prospectos (sin cuenta de usuario)
-     */
-    @GetMapping("/prospects")
-    @Operation(summary = "Listar prospectos", description = "Lista clientes prospectos sin cuenta de usuario")
-    public ResponseEntity<ApiResponse<Page<ClientResponse>>> listProspects(
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
-        Page<ClientResponse> prospects = clientService.findProspects(pageable);
-        return ResponseEntity.ok(ApiResponse.success(prospects));
-    }
-
-    /**
-     * Lista clientes registrados (con cuenta de usuario)
-     */
-    @GetMapping("/registered")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Listar registrados", description = "Lista clientes registrados con cuenta de usuario")
-    public ResponseEntity<ApiResponse<Page<ClientResponse>>> listRegistered(
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
-        Page<ClientResponse> registered = clientService.findRegistered(pageable);
-        return ResponseEntity.ok(ApiResponse.success(registered));
     }
 
     /**
@@ -72,17 +59,6 @@ public class ClientController {
     @Operation(summary = "Buscar cliente por ID", description = "Obtiene un cliente por su ID")
     public ResponseEntity<ApiResponse<ClientResponse>> findById(@PathVariable Long id) {
         ClientResponse clientResponse = clientService.findById(id);
-        return ResponseEntity.ok(ApiResponse.success(clientResponse));
-    }
-
-    /**
-     * Busca un cliente por su DNI
-     */
-    @GetMapping("/dni/{dni}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Buscar cliente por DNI", description = "Obtiene un cliente por su DNI")
-    public ResponseEntity<ApiResponse<ClientResponse>> findByDni(@PathVariable String dni) {
-        ClientResponse clientResponse = clientService.findByDni(dni);
         return ResponseEntity.ok(ApiResponse.success(clientResponse));
     }
 
@@ -124,7 +100,7 @@ public class ClientController {
     /**
      * Obtiene el perfil del cliente autenticado
      */
-    @GetMapping("/profile")
+    @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener mi perfil", description = "Obtiene el perfil del cliente autenticado")
     public ResponseEntity<ApiResponse<ClientResponse>> getMyProfile() {

@@ -1,6 +1,5 @@
 package com.matfragg.creditofacil.api.controller;
 
-import com.matfragg.creditofacil.api.dto.request.ClientRegisterRequest;
 import com.matfragg.creditofacil.api.dto.request.ForgotPasswordRequest;
 import com.matfragg.creditofacil.api.dto.request.LoginRequest;
 import com.matfragg.creditofacil.api.dto.request.RefreshTokenRequest;
@@ -29,14 +28,6 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
-
-    @PostMapping("/register/client")
-    public ResponseEntity<ApiResponse<UserResponse>> registerClient(@Valid @RequestBody ClientRegisterRequest request) {
-        UserResponse userResponse = authService.registerClient(request);
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Cliente registrado exitosamente", userResponse));
-    }
 
     /**
      * Registra un nuevo usuario en el sistema
@@ -72,7 +63,7 @@ public class AuthController {
      * @param token Token de verificación enviado por email
      * @return ApiResponse con los datos del usuario verificado
      */
-    @GetMapping("/verify")
+    @PostMapping("/verify")
     @Operation(summary = "Verificar cuenta", description = "Verifica la cuenta de un usuario usando el token enviado por email")
     public ResponseEntity<ApiResponse<UserResponse>> verifyAccount(@RequestParam String token) {
         UserResponse userResponse = authService.verifyAccount(token);
@@ -97,7 +88,7 @@ public class AuthController {
      * @param request Contiene el refresh token
      * @return ApiResponse con el nuevo token JWT
      */
-    @PostMapping("/refresh-token")
+    @PutMapping("/tokens")
     @Operation(summary = "Refrescar token", description = "Genera un nuevo token JWT usando un refresh token válido")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         AuthResponse authResponse = authService.refreshToken(request);

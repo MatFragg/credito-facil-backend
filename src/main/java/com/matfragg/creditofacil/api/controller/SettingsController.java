@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -30,8 +32,7 @@ public class SettingsController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Listar todas las configuraciones", description = "Obtiene todas las configuraciones con paginación (ADMIN)")
-    public ResponseEntity<ApiResponse<Page<SettingsResponse>>> findAll(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<SettingsResponse>>> listAll(@ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<SettingsResponse> settings = settingsService.findAll(pageable);
         return ResponseEntity.ok(
                 ApiResponse.<Page<SettingsResponse>>builder()
@@ -96,7 +97,7 @@ public class SettingsController {
         );
     }
 
-    @GetMapping("/my-settings")
+    @GetMapping("/me")
     @Operation(summary = "Obtener mi configuración", description = "Obtiene la configuración del usuario autenticado")
     public ResponseEntity<ApiResponse<SettingsResponse>> getMySettings() {
         SettingsResponse settings = settingsService.getMySettings();

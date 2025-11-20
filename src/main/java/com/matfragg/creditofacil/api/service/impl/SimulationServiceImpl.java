@@ -12,6 +12,7 @@ import com.matfragg.creditofacil.api.model.entities.*;
 import com.matfragg.creditofacil.api.model.enums.BonusType;
 import com.matfragg.creditofacil.api.repository.*;
 import com.matfragg.creditofacil.api.security.SecurityUtils;
+import com.matfragg.creditofacil.api.service.DownPaymentValidationService;
 import com.matfragg.creditofacil.api.service.FinancialIndicatorsService;
 import com.matfragg.creditofacil.api.service.FrenchMethodCalculatorService;
 import com.matfragg.creditofacil.api.service.SimulationService;
@@ -34,7 +35,7 @@ import java.util.List;
 public class SimulationServiceImpl implements SimulationService {
 
     private final SimulationRepository simulationRepository;
-    private final PaymentScheduleRepository paymentScheduleRepository;
+    // PaymentScheduleRepository ya no es necesario - cronogramas se generan bajo demanda
     private final ClientRepository clientRepository;
     private final PropertyRepository propertyRepository;
     private final BankEntityRepository bankEntityRepository;
@@ -44,25 +45,45 @@ public class SimulationServiceImpl implements SimulationService {
     private final FrenchMethodCalculatorService frenchMethodCalculator;
     private final FinancialIndicatorsService financialIndicatorsService;
     private final SecurityUtils securityUtils;
+    private final DownPaymentValidationService downPaymentValidator;
 
     @Override
     @Transactional(readOnly = true)
     public SimulationResponse calculate(SimulationRequest request) {
-        // Validar que el cliente existe
+        log.debug("Calculando simulación para cliente: {}", request.getClientId());
+        
+        // 1. Validar que el cliente existe
         clientRepository.findById(request.getClientId())
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado"));
         
-        // Validar bono gubernamental
-        if (request.getApplyGovernmentBonus() != null && request.getApplyGovernmentBonus() && request.getPropertyPrice().compareTo(BigDecimal.valueOf(200000)) > 0) {
-            throw new BadRequestException("El Bono Techo Propio solo aplica para viviendas menores o iguales a S/ 200,000");
+        // 2. Obtener entidad bancaria (necesaria para validaciones)
+        BankEntity bankEntity = bankEntityRepository.findById(request.getBankEntityId())
+                .orElseThrow(() -> new ResourceNotFoundException("Entidad bancaria no encontrada"));
+        
+        // 3. VALIDAR CUOTA INICIAL MÍNIMA
+        if (!downPaymentValidator.isDownPaymentValid(
+                request.getPropertyPrice(), 
+                request.getDownPayment(), 
+                bankEntity)) {
+            
+            String errorMessage = downPaymentValidator.getDownPaymentErrorMessage(
+                    request.getPropertyPrice(), 
+                    request.getDownPayment(), 
+                    bankEntity);
+            
+            throw new BadRequestException(errorMessage);
         }
-
-        // 1. Calcular downPayment
-        BigDecimal downPayment = request.getDownPayment();
-
-        // 2. Calcular bono gubernamental PRIMERO
+        
+        // 4. Validar bono gubernamental
         BigDecimal govBondAmount = BigDecimal.ZERO;
         if (request.getApplyGovernmentBonus() != null && request.getApplyGovernmentBonus()) {
+            // Validar que el precio califica
+            if (request.getPropertyPrice().compareTo(BigDecimal.valueOf(200000)) > 0) {
+                throw new BadRequestException(
+                        "El Bono Techo Propio solo aplica para viviendas menores o iguales a S/ 200,000");
+            }
+            
+            // Calcular monto del bono según tipo
             if (request.getBonusType() == BonusType.ACQUISITION) {
                 govBondAmount = BigDecimal.valueOf(37800); // Max S/ 37,800
             } else if (request.getBonusType() == BonusType.CONSTRUCTION) {
@@ -72,18 +93,41 @@ public class SimulationServiceImpl implements SimulationService {
             }
         }
         
-        // 3. Calcular amountToFinance RESTANDO EL BONO
+        // 5. Calcular monto a financiar
+        BigDecimal downPayment = request.getDownPayment();
         BigDecimal amountToFinance = request.getPropertyPrice()
                 .subtract(downPayment)
                 .subtract(govBondAmount);
 
-        // Obtener settings
+        // 6. VALIDAR MONTO A FINANCIAR
+        if (!downPaymentValidator.isFinancingAmountValid(
+                request.getPropertyPrice(), 
+                amountToFinance, 
+                bankEntity)) {
+            
+            String errorMessage = downPaymentValidator.getFinancingAmountErrorMessage(
+                    request.getPropertyPrice(), 
+                    amountToFinance, 
+                    bankEntity);
+            
+            throw new BadRequestException(errorMessage);
+        }
+
+        // 7. VALIDAR COHERENCIA DE MONTOS
+        if (!downPaymentValidator.validateAmountCoherence(
+                request.getPropertyPrice(),
+                downPayment,
+                amountToFinance,
+                govBondAmount)) {
+            
+            throw new BadRequestException(
+                    "Los montos proporcionados no suman correctamente el precio de la vivienda. " +
+                    "Verifique: Precio = Cuota Inicial + Monto a Financiar + Bono");
+        }
+
+        // 8. Obtener configuración
         Settings settings = settingsRepository.findById(request.getSettingsId())
                 .orElseThrow(() -> new ResourceNotFoundException("Configuración no encontrada"));
-
-        // Obtener BankEntity
-        bankEntityRepository.findById(request.getBankEntityId())
-                .orElseThrow(() -> new ResourceNotFoundException("Entidad bancaria no encontrada"));
         
         // Generar cronograma de pagos usando el método francés
         List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
@@ -104,7 +148,6 @@ public class SimulationServiceImpl implements SimulationService {
             monthlyPayment = schedule.get(0).getPayment();
         }
 
-        // ✅ CORRECCIÓN: Calcular totalMonthlyPayment correctamente
         BigDecimal lifeInsurance = request.getLifeInsuranceRate()
             .multiply(amountToFinance)
             .setScale(2, RoundingMode.HALF_UP);
@@ -141,6 +184,9 @@ public class SimulationServiceImpl implements SimulationService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Construir y retornar SimulationResponse
+        log.info("Simulación calculada exitosamente - Cuota mensual: S/ {}, Total a pagar: S/ {}", 
+                monthlyPayment, totalAmountToPay);
+        
         return SimulationResponse.builder()
                 .clientId(request.getClientId())
                 .propertyId(request.getPropertyId())
@@ -162,7 +208,7 @@ public class SimulationServiceImpl implements SimulationService {
                 .notaryFees(request.getNotaryFees())
                 .registrationFees(request.getRegistrationFees())
                 .monthlyPayment(monthlyPayment.setScale(2, RoundingMode.HALF_UP))
-                .totalMonthlyPayment(totalMonthlyPayment.setScale(2, RoundingMode.HALF_UP)) // ✅ CORREGIDO
+                .totalMonthlyPayment(totalMonthlyPayment.setScale(2, RoundingMode.HALF_UP)) 
                 .totalAmountToPay(totalAmountToPay.setScale(2, RoundingMode.HALF_UP))
                 .totalInterest(totalInterest.setScale(2, RoundingMode.HALF_UP))
                 .totalAdditionalCosts(additionalCosts)
@@ -221,24 +267,10 @@ public class SimulationServiceImpl implements SimulationService {
 
     // Guardar simulación
     Simulation saved = simulationRepository.save(simulation);
-    log.info("Simulación guardada con id: {}", saved.getId());
+    log.info("Simulación guardada con id: {} (cronograma se generará bajo demanda)", saved.getId());
 
-    // Calcular y guardar cronograma
-    List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
-            saved.getAmountToFinance(),
-            saved.getAnnualRate(),
-            saved.getTermYears(),
-            settings,
-            saved.getLifeInsuranceRate(),
-            saved.getPropertyInsurance()
-    );
-
-    // Asociar simulación a cada pago
-    schedule.forEach(payment -> payment.setSimulation(saved));
-
-    // Guardar cronograma
-    paymentScheduleRepository.saveAll(schedule);
-    log.info("Cronograma de {} pagos guardado para simulación {}", schedule.size(), saved.getId());
+    // ✅ NO guardar cronograma en DB - se genera bajo demanda
+    // Esto ahorra ~300 registros por simulación de 25 años
 
     return simulationMapper.toResponse(saved);
 }
@@ -256,35 +288,26 @@ public class SimulationServiceImpl implements SimulationService {
         // Recalcular valores
         SimulationResponse recalculated = calculate(request);
         simulation.setAmountToFinance(recalculated.getAmountToFinance());
+        simulation.setGovernmentBonusAmount(recalculated.getGovernmentBonusAmount());
         simulation.setMonthlyPayment(recalculated.getMonthlyPayment());
+        simulation.setTotalMonthlyPayment(recalculated.getTotalMonthlyPayment());
+        simulation.setTotalAmountToPay(recalculated.getTotalAmountToPay());
+        simulation.setTotalInterest(recalculated.getTotalInterest());
+        simulation.setTotalAdditionalCosts(recalculated.getTotalAdditionalCosts());
+        simulation.setLoanTermMonths(recalculated.getLoanTermMonths());
+        simulation.setTotalLifeInsurance(recalculated.getTotalLifeInsurance());
+        simulation.setTotalPropertyInsurance(recalculated.getTotalPropertyInsurance());
         simulation.setTcea(recalculated.getTcea());
         simulation.setNpv(recalculated.getNpv());
         simulation.setIrr(recalculated.getIrr());
+        simulation.setUpdatedAt(LocalDateTime.now());
 
-        // Guardar
+        // Guardar simulación actualizada
         Simulation updated = simulationRepository.save(simulation);
 
-        // Eliminar cronograma antiguo y crear uno nuevo
-        paymentScheduleRepository.deleteAll(
-                paymentScheduleRepository.findBySimulationId(id)
-        );
+        // ✅ NO actualizar cronograma en DB - se genera bajo demanda
 
-        Settings settings = settingsRepository.findById(request.getSettingsId())
-                .orElseThrow(() -> new ResourceNotFoundException("Configuración no encontrada"));
-
-        List<PaymentSchedule> newSchedule = frenchMethodCalculator.calculatePaymentSchedule(
-                updated.getAmountToFinance(),
-                updated.getAnnualRate(),
-                updated.getTermYears(),
-                settings,
-                updated.getLifeInsuranceRate(),
-                updated.getPropertyInsurance()
-        );
-
-        newSchedule.forEach(payment -> payment.setSimulation(updated));
-        paymentScheduleRepository.saveAll(newSchedule);
-
-        log.info("Simulación actualizada con id: {}", id);
+        log.info("Simulación actualizada con id: {} (cronograma se regenerará bajo demanda)", id);
         return simulationMapper.toResponse(updated);
     }
     
@@ -312,10 +335,7 @@ public class SimulationServiceImpl implements SimulationService {
         Simulation simulation = simulationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Simulación no encontrada con id: " + id));
 
-        // Eliminar cronograma primero
-        paymentScheduleRepository.deleteAll(
-                paymentScheduleRepository.findBySimulationId(id)
-        );
+        // ✅ NO eliminar cronograma - ya no se almacena en DB
 
         // Eliminar simulación
         simulationRepository.delete(simulation);
@@ -341,21 +361,30 @@ public class SimulationServiceImpl implements SimulationService {
     @Override
     @Transactional(readOnly = true)
     public List<PaymentScheduleResponse> getSchedule(Long simulationId) {
-        log.debug("Obteniendo cronograma de pagos para simulación: {}", simulationId);
+        log.debug("Generando cronograma de pagos bajo demanda para simulación: {}", simulationId);
 
-        // Verificar que la simulación existe
-        if (!simulationRepository.existsById(simulationId)) {
-            throw new ResourceNotFoundException("Simulación no encontrada con id: " + simulationId);
-        }
+        // Obtener simulación con todos los datos necesarios
+        Simulation simulation = simulationRepository.findById(simulationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Simulación no encontrada con id: " + simulationId));
 
-        List<PaymentSchedule> schedule = paymentScheduleRepository
-                .findBySimulationIdOrderByPaymentNumberAsc(simulationId);
+        Settings settings = simulation.getSettings();
+
+        // ✅ Generar cronograma en tiempo real (no almacenado en DB)
+        List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
+                simulation.getAmountToFinance(),
+                simulation.getAnnualRate(),
+                simulation.getTermYears(),
+                settings,
+                simulation.getLifeInsuranceRate(),
+                simulation.getPropertyInsurance()
+        );
+
+        log.debug("Cronograma de {} pagos generado exitosamente", schedule.size());
 
         return paymentScheduleMapper.toResponseList(schedule);
     }
 
     private void validateSimulationRequest(SimulationRequest request) {
-        // Validar que la cuota inicial es suficiente (al menos 10%)
         BigDecimal minDownPayment = request.getPropertyPrice()
                 .multiply(new BigDecimal("0.10"));
 

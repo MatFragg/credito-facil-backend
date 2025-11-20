@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -30,8 +32,7 @@ public class PropertyController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Listar todas las propiedades", description = "Obtiene todas las propiedades con paginación (ADMIN)")
-    public ResponseEntity<ApiResponse<Page<PropertyResponse>>> findAll(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<PropertyResponse>>> findAll(@ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<PropertyResponse> properties = propertyService.findAll(pageable);
         return ResponseEntity.ok(
                 ApiResponse.<Page<PropertyResponse>>builder()
@@ -96,10 +97,9 @@ public class PropertyController {
         );
     }
 
-    @GetMapping("/my-properties")
+    @GetMapping("/me")
     @Operation(summary = "Obtener mis propiedades", description = "Obtiene las propiedades del cliente autenticado con paginación")
-    public ResponseEntity<ApiResponse<Page<PropertyResponse>>> getMyProperties(
-            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<PropertyResponse>>> getMyProperties(@ParameterObject @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<PropertyResponse> myProperties = propertyService.getMyProperties(pageable);
         return ResponseEntity.ok(
                 ApiResponse.<Page<PropertyResponse>>builder()

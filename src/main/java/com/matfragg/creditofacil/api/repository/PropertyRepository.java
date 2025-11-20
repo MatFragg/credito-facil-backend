@@ -31,7 +31,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     
     List<Property> findByProvinceContainingIgnoreCase(String province);
     
-    List<Property> findByDepartmentContainingIgnoreCase(String department);
+    List<Property> findByCityContainingIgnoreCase(String city);
 
     List<Property> findByPriceBetween(BigDecimal minPrice, BigDecimal maxPrice);
 
@@ -62,9 +62,18 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     
     @Query("SELECT p.province, COUNT(p) FROM Property p GROUP BY p.province ORDER BY COUNT(p) DESC")
     List<Object[]> findMostPopularProvince();
+
+    @Query("SELECT COUNT(DISTINCT p.city) FROM Property p")
+    long countDistinctCities();
+
+    @Query("SELECT p.city, COUNT(p) FROM Property p GROUP BY p.city ORDER BY COUNT(p) DESC")
+    List<Object[]> findMostPopularCity();
     
     @Query("SELECT AVG(p.bedrooms) FROM Property p")
     Double avgBedrooms();
+
+    @Query("SELECT p.propertyType, COUNT(p) FROM Property p GROUP BY p.propertyType ORDER BY COUNT(p) DESC")
+    List<Object[]> findMostPopularPropertyType();
     
     @Query("SELECT AVG(p.area) FROM Property p")
     BigDecimal avgArea();

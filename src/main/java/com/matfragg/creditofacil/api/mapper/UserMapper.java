@@ -14,7 +14,7 @@ public interface UserMapper {
     /**
      * Convierte una entidad User a UserResponse DTO
      */
-    @Mapping(target = "roles", ignore = true)
+    @Mapping(target = "roles", source = "role")
     UserResponse toResponse(User user);
     
     /**

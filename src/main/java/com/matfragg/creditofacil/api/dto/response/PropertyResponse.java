@@ -31,7 +31,7 @@ public class PropertyResponse {
     private String address;
     private String district;
     private String province;
-    private String department;
+    private String city;
     private PropertyStatus status;
     private String imageUrl;
     private String description;

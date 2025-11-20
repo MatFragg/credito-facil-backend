@@ -56,8 +56,8 @@ public class PropertyRequest {
     @Size(max = 100, message = "Province cannot exceed 100 characters")
     private String province;
 
-    @Size(max = 100, message = "Department cannot exceed 100 characters")
-    private String department;
+    @Size(max = 100, message = "City cannot exceed 100 characters")
+    private String city;
 
     private PropertyStatus status;
 

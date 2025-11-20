@@ -13,9 +13,11 @@ import lombok.RequiredArgsConstructor;
 
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -38,7 +40,7 @@ public class UserController {
      * 
      * @return ApiResponse con los datos del usuario
      */
-    @GetMapping("/profile")
+    @GetMapping("/me")
     @Operation(summary = "Obtener perfil actual", description = "Obtiene el perfil del usuario autenticado")
     public ResponseEntity<ApiResponse<UserResponse>> getProfile() {
         UserResponse userResponse = userService.getProfile();
@@ -51,7 +53,7 @@ public class UserController {
      * @param request Datos del perfil a actualizar
      * @return ApiResponse con los datos actualizados
      */
-    @PutMapping("/profile")
+    @PutMapping("/me")
     @Operation(summary = "Actualizar perfil", description = "Actualiza el perfil del usuario autenticado")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(@Valid @RequestBody UserProfileRequest request) {
         UserResponse userResponse = userService.updateProfile(request);
@@ -69,22 +71,6 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(request);
         return ResponseEntity.ok(ApiResponse.success("Contraseña cambiada exitosamente", null));
-    }
-
-    /**
-     * Lista todos los usuarios con paginación (solo ADMIN)
-     * 
-     * @param pageable Configuración de paginación
-     * @return ApiResponse con la página de usuarios
-     */
-    @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Listar usuarios", description = "Lista todos los usuarios con paginación (solo administradores)")
-    public ResponseEntity<ApiResponse<Page<UserResponse>>> listUsers(
-            @ParameterObject
-            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<UserResponse> users = userService.listUsers(pageable);
-        return ResponseEntity.ok(ApiResponse.success(users));
     }
 
     /**
@@ -107,12 +93,20 @@ public class UserController {
      * @param email Email del usuario a buscar
      * @return ApiResponse con los datos del usuario
      */
-    @GetMapping("/email/{email}")
+    @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Buscar usuario por email", description = "Obtiene un usuario específico por su email (solo administradores)")
-    public ResponseEntity<ApiResponse<UserResponse>> findByEmail(@PathVariable String email) {
-        UserResponse userResponse = userService.findByEmail(email);
-        return ResponseEntity.ok(ApiResponse.success(userResponse));
+    @Operation(summary = "Listar usuarios", description = "Lista todos los usuarios con paginación. Usar query param 'email' para buscar por email (solo administradores)")
+    public ResponseEntity<ApiResponse<Page<UserResponse>>> listUsers(
+            @ParameterObject
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) String email) {
+        if (email != null && !email.trim().isEmpty()) {
+            UserResponse user = userService.findByEmail(email);
+            Page<UserResponse> singleUserPage = new PageImpl<>(List.of(user), pageable, 1);
+            return ResponseEntity.ok(ApiResponse.success(singleUserPage));
+        }
+        Page<UserResponse> users = userService.listUsers(pageable);
+        return ResponseEntity.ok(ApiResponse.success(users));
     }
 
     /**

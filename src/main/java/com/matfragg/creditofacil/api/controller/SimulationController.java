@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -30,9 +32,9 @@ public class SimulationController {
 
     private final SimulationService simulationService;
 
-    @PostMapping("/calculate")
+    @PostMapping("/previews")
     @Operation(summary = "Calcular simulación", description = "Calcula una simulación sin guardarla (preview)")
-    public ResponseEntity<ApiResponse<SimulationResponse>> calculate(@Valid @RequestBody SimulationRequest request) {
+    public ResponseEntity<ApiResponse<SimulationResponse>> createPreview(@Valid @RequestBody SimulationRequest request) {
         SimulationResponse calculated = simulationService.calculate(request);
         return ResponseEntity.ok(
                 ApiResponse.<SimulationResponse>builder()
@@ -59,8 +61,7 @@ public class SimulationController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Listar todas las simulaciones", description = "Obtiene todas las simulaciones con paginación (ADMIN)")
-    public ResponseEntity<ApiResponse<Page<SimulationResponse>>> findAll(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<SimulationResponse>>> findAll(@ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<SimulationResponse> simulations = simulationService.findAll(pageable);
         return ResponseEntity.ok(
                 ApiResponse.<Page<SimulationResponse>>builder()
@@ -112,10 +113,9 @@ public class SimulationController {
         );
     }
 
-    @GetMapping("/my-simulations")
+    @GetMapping("/me")
     @Operation(summary = "Obtener mis simulaciones", description = "Obtiene las simulaciones del cliente autenticado con paginación")
-    public ResponseEntity<ApiResponse<Page<SimulationResponse>>> getMySimulations(
-            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<SimulationResponse>>> getMySimulations(@ParameterObject @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<SimulationResponse> mySimulations = simulationService.getMySimulations(pageable);
         return ResponseEntity.ok(
                 ApiResponse.<Page<SimulationResponse>>builder()

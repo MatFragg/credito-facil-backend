@@ -68,8 +68,8 @@ public class Property {
     @Column(name = "province", length = 100)
     private String province = "Lima";
 
-    @Column(name = "department", length = 100)
-    private String department = "Lima";
+    @Column(name = "city", length = 100)
+    private String city = "Lima";
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
