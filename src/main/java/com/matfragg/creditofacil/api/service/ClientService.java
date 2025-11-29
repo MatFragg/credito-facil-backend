@@ -64,7 +64,7 @@ public interface ClientService {
      * 
      * @return ClientResponse con los datos del cliente
      */
-    ClientResponse getMyProfile();
+    Page<ClientResponse> getMyClients(Pageable pageable);
     
     /**
      * Lista los clientes prospectos (sin cuenta de usuario)

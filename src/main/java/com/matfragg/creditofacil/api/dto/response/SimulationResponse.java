@@ -22,6 +22,16 @@ public class SimulationResponse {
     private Long settingsId;
     private String simulationName;  // Agregar
     private String simulationCode;  // Agregar si es necesario
+    
+    // Currency information
+    private String currency;
+    private String currencySymbol;
+    private BigDecimal exchangeRateUsed;
+    private BigDecimal propertyPriceAlternate;
+    private BigDecimal monthlyPaymentAlternate;
+    private String alternateCurrency;
+    private String alternateCurrencySymbol;
+    
     private BigDecimal propertyPrice;
     private BigDecimal downPayment;
     private BigDecimal amountToFinance;
@@ -32,6 +42,10 @@ public class SimulationResponse {
     private Integer termYears;
     private BigDecimal lifeInsuranceRate;
     private BigDecimal propertyInsurance;
+    private BigDecimal desgravamenRate;
+    private BigDecimal totalDesgravamenInsurance;
+    private Boolean applyPBP;
+    private BigDecimal pbpAmount;
     private BigDecimal openingCommission;  // Agregar
     private BigDecimal notaryFees;  // Agregar
     private BigDecimal registrationFees;  // Agregar

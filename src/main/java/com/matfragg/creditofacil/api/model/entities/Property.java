@@ -44,6 +44,9 @@ public class Property {
 
     private BigDecimal price;
 
+    @Column(name = "currency", length = 3, nullable = false)
+    private String currency = "PEN";
+
     @Column(name = "area", precision = 10, scale = 2)
     private BigDecimal area;
 
@@ -78,8 +81,14 @@ public class Property {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Column(name = "image_public_id", length = 255)
+    private String imagePublicId;
+
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "is_eco_friendly")
+    private Boolean isEcoFriendly = false;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

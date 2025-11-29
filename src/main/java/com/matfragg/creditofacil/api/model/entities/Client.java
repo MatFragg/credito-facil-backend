@@ -43,6 +43,9 @@ public class Client {
     @Column(name = "monthly_income")
     private BigDecimal monthlyIncome;
 
+    @Column(name = "income_currency", length = 3)
+    private String incomeCurrency = "PEN";
+
     private String occupation;
 
     @Enumerated(EnumType.STRING)

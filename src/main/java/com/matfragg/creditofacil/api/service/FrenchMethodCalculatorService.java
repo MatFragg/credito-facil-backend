@@ -32,7 +32,8 @@ public interface FrenchMethodCalculatorService {
             Integer termYears,
             Settings settings,
             BigDecimal lifeInsurance,
-            BigDecimal propertyInsurance
+            BigDecimal propertyInsurance,
+            BigDecimal desgravamenRate
     );
 
     /**

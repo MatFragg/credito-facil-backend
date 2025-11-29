@@ -98,15 +98,16 @@ public class SettingsController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "Obtener mi configuración", description = "Obtiene la configuración del usuario autenticado")
-    public ResponseEntity<ApiResponse<SettingsResponse>> getMySettings() {
-        SettingsResponse settings = settingsService.getMySettings();
-        return ResponseEntity.ok(
-                ApiResponse.<SettingsResponse>builder()
-                        .success(true)
-                        .message("Configuración obtenida exitosamente")
-                        .data(settings)
-                        .build()
-        );
+    @Operation(summary = "Obtener mis configuraciones", description = "Obtiene todas las configuraciones del usuario")
+    public ResponseEntity<ApiResponse<Page<SettingsResponse>>> getMySettings(
+            @ParameterObject @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        Page<SettingsResponse> settings = settingsService.getMySettings(pageable);
+        
+        return ResponseEntity.ok(ApiResponse.<Page<SettingsResponse>>builder()
+                .success(true)
+                .message("Configuraciones obtenidas exitosamente")
+                .data(settings)
+                .build());
     }
 }

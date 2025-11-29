@@ -23,6 +23,8 @@ public class PropertyResponse {
     private String propertyCode;
     private PropertyType propertyType;
     private BigDecimal price;
+    private String currency;
+    private String currencySymbol;
     private BigDecimal area;
     private Integer bedrooms;
     private Integer bathrooms;
@@ -33,6 +35,7 @@ public class PropertyResponse {
     private String province;
     private String city;
     private PropertyStatus status;
+    private Boolean isEcoFriendly;
     private String imageUrl;
     private String description;
     private LocalDateTime createdAt;

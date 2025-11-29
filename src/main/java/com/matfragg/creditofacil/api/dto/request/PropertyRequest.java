@@ -32,6 +32,10 @@ public class PropertyRequest {
     @DecimalMin(value = "0.01", message = "Price must be greater than 0")
     private BigDecimal price;
 
+    @Pattern(regexp = "^(PEN|USD)$", message = "Currency must be PEN or USD")
+    @Builder.Default
+    private String currency = "PEN";
+
     @DecimalMin(value = "0.01", message = "Area must be greater than 0")
     private BigDecimal area;
 
@@ -61,8 +65,7 @@ public class PropertyRequest {
 
     private PropertyStatus status;
 
-    @Size(max = 500, message = "Image URL cannot exceed 500 characters")
-    private String imageUrl;
-
     private String description;
+
+    private Boolean isEcoFriendly;
 }

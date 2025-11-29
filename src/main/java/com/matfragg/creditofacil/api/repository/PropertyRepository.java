@@ -15,6 +15,10 @@ import com.matfragg.creditofacil.api.model.entities.Property;
 import com.matfragg.creditofacil.api.model.enums.PropertyStatus;
 
 public interface PropertyRepository extends JpaRepository<Property, Long> {
+
+    @Query("SELECT p FROM Property p WHERE p.client.user.id = :userId")
+    Page<Property> findByClientUserId(@Param("userId") Long userId, Pageable pageable);
+    
     List<Property> findByClientId(Long clientId);
     
     Page<Property> findByClientId(Long clientId, Pageable pageable);

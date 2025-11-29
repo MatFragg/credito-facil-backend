@@ -13,6 +13,10 @@ import org.springframework.data.repository.query.Param;
 import com.matfragg.creditofacil.api.model.entities.Simulation;
 
 public interface SimulationRepository extends JpaRepository<Simulation, Long> {
+
+    @Query("SELECT s FROM Simulation s WHERE s.client.user.id = :userId")
+    Page<Simulation> findByClientUserId(@Param("userId") Long userId, Pageable pageable);
+
     List<Simulation> findByClientId(Long clientId);
     
     Page<Simulation> findByClientId(Long clientId, Pageable pageable);
@@ -52,6 +56,7 @@ public interface SimulationRepository extends JpaRepository<Simulation, Long> {
     
     @Query("SELECT s.bankEntity.name, COUNT(s) FROM Simulation s GROUP BY s.bankEntity.name ORDER BY COUNT(s) DESC")
     List<Object[]> findMostUsedBank();
+    
     
     // Client-specific statistics
     @Query("SELECT SUM(s.amountToFinance) FROM Simulation s WHERE s.client.id = :clientId")

@@ -88,15 +88,18 @@ public class SettingsServiceImpl implements SettingsService {
 
     @Override
     @Transactional(readOnly = true)
-    public SettingsResponse getMySettings() {
-        log.debug("Obteniendo configuración del usuario autenticado");
+    public Page<SettingsResponse> getMySettings(Pageable pageable) {
+        log.debug("Obteniendo TODOS los settings del usuario autenticado");
 
         User currentUser = securityUtils.getCurrentUser()
             .orElseThrow(() -> new UnauthorizedException("Usuario no autenticado"));
 
-        Settings settings = settingsRepository.findByUserId(currentUser.getId())
-            .orElseThrow(() -> new ResourceNotFoundException("No se encontró configuración para el usuario actual"));
+        // ✅ Retorna TODOS los settings del usuario con paginación
+        Page<Settings> settings = settingsRepository.findByUserId(currentUser.getId(), pageable);
+        
+        log.debug("Encontrados {} settings para el usuario {}", 
+                settings.getTotalElements(), currentUser.getEmail());
 
-        return settingsMapper.toResponse(settings);
+        return settings.map(settingsMapper::toResponse);
     }
 }

@@ -11,6 +11,7 @@ import java.util.List;
 public interface PropertyMapper {
 
     @Mapping(target = "clientId", source = "client.id")
+    @Mapping(target = "currencySymbol", ignore = true)
     PropertyResponse toResponse(Property property);
 
     List<PropertyResponse> toResponseList(List<Property> properties);

@@ -14,6 +14,11 @@ public interface SimulationMapper {
     @Mapping(target = "propertyId", source = "property.id")
     @Mapping(target = "bankEntityId", source = "bankEntity.id")
     @Mapping(target = "settingsId", source = "settings.id")
+    @Mapping(target = "currencySymbol", ignore = true)
+    @Mapping(target = "propertyPriceAlternate", ignore = true)
+    @Mapping(target = "monthlyPaymentAlternate", ignore = true)
+    @Mapping(target = "alternateCurrency", ignore = true)
+    @Mapping(target = "alternateCurrencySymbol", ignore = true)
     SimulationResponse toResponse(Simulation simulation);
 
     List<SimulationResponse> toResponseList(List<Simulation> simulations);
@@ -24,6 +29,9 @@ public interface SimulationMapper {
     @Mapping(target = "bankEntity", ignore = true)
     @Mapping(target = "settings", ignore = true)
     @Mapping(target = "simulationCode", ignore = true)
+    @Mapping(target = "exchangeRateUsed", ignore = true)
+    @Mapping(target = "pbpAmount", ignore = true)
+    @Mapping(target = "totalDesgravamenInsurance", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "amountToFinance", ignore = true)
@@ -47,6 +55,9 @@ public interface SimulationMapper {
     @Mapping(target = "bankEntity", ignore = true)
     @Mapping(target = "settings", ignore = true)
     @Mapping(target = "simulationCode", ignore = true)
+    @Mapping(target = "exchangeRateUsed", ignore = true)
+    @Mapping(target = "pbpAmount", ignore = true)
+    @Mapping(target = "totalDesgravamenInsurance", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "amountToFinance", ignore = true)

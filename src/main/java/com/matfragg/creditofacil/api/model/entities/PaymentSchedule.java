@@ -48,6 +48,11 @@ public class PaymentSchedule {
 
     @Column(name = "property_insurance")
     private BigDecimal propertyInsurance;
+    
+    // ==================== NUEVO CAMPO ====================
+    @Column(name = "desgravamen_insurance")
+    private BigDecimal desgravamenInsurance;
+    // ==================== FIN NUEVO CAMPO ====================
 
     @Column(name = "total_payment")
     private BigDecimal totalPayment;

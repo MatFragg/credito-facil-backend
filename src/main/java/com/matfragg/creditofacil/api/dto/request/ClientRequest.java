@@ -35,6 +35,9 @@ public class ClientRequest {
     @Positive(message = "Monthly income must be positive")
     private BigDecimal monthlyIncome;
 
+    @Pattern(regexp = "^(PEN|USD)$", message = "Currency must be PEN or USD")
+    private String incomeCurrency = "PEN";
+
     private String occupation;
 
     private EvaluationStatus evaluationStatus;

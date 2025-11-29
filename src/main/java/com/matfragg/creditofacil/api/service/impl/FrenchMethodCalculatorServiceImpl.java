@@ -31,7 +31,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             Integer termYears,
             Settings settings,
             BigDecimal lifeInsuranceRate,
-            BigDecimal propertyInsuranceAmount) {
+            BigDecimal propertyInsuranceAmount, BigDecimal desgravamenRate) {
 
         log.debug("Calculando cronograma de pagos para monto: {} a {} años", amountToFinance, termYears);
 
@@ -68,7 +68,8 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
                 monthlyRate,
                 totalMonths,
                 lifeInsuranceRate,
-                propertyInsuranceAmount
+                propertyInsuranceAmount,
+                desgravamenRate
         );
 
         // Paso 6: Aplicar periodo de gracia si existe
@@ -248,7 +249,8 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
                 monthlyRate,
                 totalMonths,
                 lifeInsuranceRate,
-                propertyInsurance
+                propertyInsurance,
+                BigDecimal.ZERO
         );
     }
 
@@ -260,7 +262,8 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
         BigDecimal monthlyRate,
         Integer totalMonths,
         BigDecimal lifeInsuranceRate,     // Tasa (ej: 0.00045)
-        BigDecimal propertyInsuranceAmount // Monto fijo (ej: 40.00)
+        BigDecimal propertyInsuranceAmount, // Monto fijo (ej: 40.00)
+        BigDecimal desgravamenRate 
     ) {
 
         List<PaymentSchedule> schedule = new ArrayList<>();
@@ -272,8 +275,6 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             payment.setPaymentNumber(month);
             payment.setPaymentDate(currentDate);
             payment.setInitialBalance(balance.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
-            
-            // --- 8. USAR EL ENUM CORRECTO ---
             payment.setPeriodType(PeriodType.ORDINARY); 
             payment.setPropertyInsurance(propertyInsuranceAmount.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
 
@@ -290,10 +291,21 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             BigDecimal lifeInsurancePayment = balance.multiply(lifeInsuranceRate)
                     .setScale(MONEY_SCALE, RoundingMode.HALF_UP)
                     .max(BigDecimal.ZERO); 
+            
+            // ==================== NUEVO: CALCULAR DESGRAVAMEN ====================
+            BigDecimal desgravamenPayment = BigDecimal.ZERO;
+            if (desgravamenRate != null && desgravamenRate.compareTo(BigDecimal.ZERO) > 0) {
+                desgravamenPayment = balance.multiply(desgravamenRate)
+                        .setScale(MONEY_SCALE, RoundingMode.HALF_UP)
+                        .max(BigDecimal.ZERO);
+            }
+            payment.setDesgravamenInsurance(desgravamenPayment);
+            // ==================== FIN DESGRAVAMEN ====================
 
             BigDecimal totalPayment = monthlyPayment
                     .add(lifeInsurancePayment)
-                    .add(propertyInsuranceAmount);
+                    .add(propertyInsuranceAmount)
+                    .add(desgravamenPayment);  // INCLUIR DESGRAVAMEN
 
             BigDecimal newBalance = balance.subtract(principalPayment);
             if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
@@ -303,7 +315,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             payment.setPayment(monthlyPayment.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
             payment.setInterest(interest);
             payment.setPrincipal(principalPayment.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
-            payment.setLifeInsurance(lifeInsurancePayment); // Guardar el MONTO
+            payment.setLifeInsurance(lifeInsurancePayment);
             payment.setTotalPayment(totalPayment.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
             payment.setFinalBalance(newBalance.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
 

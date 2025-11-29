@@ -33,6 +33,7 @@ public class ClientServiceImpl implements ClientService {
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
     private final ClientMapper clientMapper;
+    private final SecurityUtils securityUtils;
 
     /**
      * Lists all clients with pagination.
@@ -167,19 +168,19 @@ public class ClientServiceImpl implements ClientService {
 
     @Override
     @Transactional(readOnly = true)
-    public ClientResponse getMyProfile() {
-        log.info("Obteniendo perfil del cliente autenticado");
+    public Page<ClientResponse> getMyClients(Pageable pageable) {
+        log.debug("Obteniendo TODOS los clientes del usuario autenticado");
+
+        User currentUser = securityUtils.getCurrentUser()
+            .orElseThrow(() -> new UnauthorizedException("Usuario no autenticado"));
+
+        // ✅ Retorna TODOS los clientes del usuario con paginación
+        Page<Client> clients = clientRepository.findByUserId(currentUser.getId(), pageable);
         
-        String email = SecurityUtils.getCurrentUsername()
-                .orElseThrow(() -> new UnauthorizedException("No hay usuario autenticado"));
-        
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
-        
-        Client client = clientRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado para este usuario"));
-        
-        return clientMapper.toResponse(client);
+        log.debug("Encontrados {} clientes para el usuario {}", 
+                clients.getTotalElements(), currentUser.getEmail());
+
+        return clients.map(clientMapper::toResponse);
     }
 
     @Override

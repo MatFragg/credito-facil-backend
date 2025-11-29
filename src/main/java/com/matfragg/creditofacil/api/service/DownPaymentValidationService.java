@@ -1,5 +1,6 @@
 package com.matfragg.creditofacil.api.service;
 
+import com.matfragg.creditofacil.api.exception.BadRequestException;
 import com.matfragg.creditofacil.api.model.entities.BankEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,133 @@ import java.math.RoundingMode;
 @Slf4j
 @Service
 public class DownPaymentValidationService {
+
+	/**
+     * Valida que el valor de la vivienda esté dentro del rango NCMV
+     * 
+     * @param propertyPrice Precio de la vivienda
+     * @param bankEntity Entidad bancaria con los rangos configurados
+     * @param useCRC Si se usa Cobertura de Riesgo Crediticio (permite mayor valor)
+     * @throws BadRequestException si el precio está fuera del rango permitido
+     */
+    public void validateNCMVPropertyRange(
+            BigDecimal propertyPrice, 
+            BankEntity bankEntity,
+            boolean useCRC) {
+        
+        BigDecimal minValue = bankEntity.getNcmvMinPropertyValue();
+        BigDecimal maxValue = useCRC 
+                ? bankEntity.getNcmvMaxPropertyValueCRC() 
+                : bankEntity.getNcmvMaxPropertyValue();
+        
+        if (propertyPrice.compareTo(minValue) < 0) {
+            String message = String.format(
+                "El valor de la vivienda (S/ %.2f) es menor al mínimo permitido por el NCMV (S/ %.2f)",
+                propertyPrice.doubleValue(), minValue.doubleValue()
+            );
+            log.warn(message);
+            throw new BadRequestException(message);
+        }
+        
+        if (propertyPrice.compareTo(maxValue) > 0) {
+            String message = String.format(
+                "El valor de la vivienda (S/ %.2f) excede el máximo permitido por el NCMV %s(S/ %.2f). " +
+                "Para viviendas de mayor valor, consulte otras opciones de financiamiento.",
+                propertyPrice.doubleValue(),
+                useCRC ? "con CRC " : "",
+                maxValue.doubleValue()
+            );
+            log.warn(message);
+            throw new BadRequestException(message);
+        }
+        
+        log.debug("Validación NCMV exitosa - Precio: S/ {} dentro del rango S/ {} - S/ {}",
+                propertyPrice, minValue, maxValue);
+    }
+
+	/**
+     * Calcula el monto del Premio al Buen Pagador (PBP) según el valor de la vivienda
+     * 
+     * @param propertyPrice Precio de la vivienda
+     * @param bankEntity Entidad bancaria con los montos de PBP configurados
+     * @return Monto del PBP (S/ 6,400, S/ 17,700, o S/ 0 si no califica)
+     */
+    public BigDecimal calculatePBPAmount(BigDecimal propertyPrice, BankEntity bankEntity) {
+        BigDecimal ncmvMin = bankEntity.getNcmvMinPropertyValue();
+        BigDecimal pbpThreshold = bankEntity.getPbpThresholdLow();
+        BigDecimal ncmvMax = bankEntity.getNcmvMaxPropertyValue();
+        
+        // PBP Standard: S/ 68,800 - S/ 102,900 → S/ 6,400
+        if (propertyPrice.compareTo(ncmvMin) >= 0 && propertyPrice.compareTo(pbpThreshold) < 0) {
+            log.debug("PBP Standard aplicable - Vivienda en rango S/ {} - S/ {}", ncmvMin, pbpThreshold);
+            return bankEntity.getPbpAmountStandard();
+        }
+        
+        // PBP Plus: S/ 102,900 - S/ 362,100 → S/ 17,700
+        if (propertyPrice.compareTo(pbpThreshold) >= 0 && propertyPrice.compareTo(ncmvMax) <= 0) {
+            log.debug("PBP Plus aplicable - Vivienda en rango S/ {} - S/ {}", pbpThreshold, ncmvMax);
+            return bankEntity.getPbpAmountPlus();
+        }
+        
+        log.debug("PBP no aplicable para vivienda de S/ {}", propertyPrice);
+        return BigDecimal.ZERO;
+    }
+
+	/**
+     * Verifica si la vivienda califica para el Premio al Buen Pagador
+     * 
+     * @param propertyPrice Precio de la vivienda
+     * @param bankEntity Entidad bancaria
+     * @return true si califica para PBP
+     */
+    public boolean qualifiesForPBP(BigDecimal propertyPrice, BankEntity bankEntity) {
+        return calculatePBPAmount(propertyPrice, bankEntity).compareTo(BigDecimal.ZERO) > 0;
+    }
+    
+    /**
+     * Obtiene mensaje informativo sobre el PBP
+     */
+    public String getPBPInfoMessage(BigDecimal propertyPrice, BankEntity bankEntity) {
+        BigDecimal pbpAmount = calculatePBPAmount(propertyPrice, bankEntity);
+        
+        if (pbpAmount.compareTo(BigDecimal.ZERO) == 0) {
+            return "Esta vivienda no califica para el Premio al Buen Pagador (PBP).";
+        }
+        
+        String type = pbpAmount.compareTo(bankEntity.getPbpAmountStandard()) == 0 
+                ? "Standard" : "Plus";
+        
+        return String.format(
+            "Esta vivienda califica para el Premio al Buen Pagador %s de S/ %.2f. " +
+            "Este descuento se aplica al saldo de deuda como reconocimiento al cumplimiento de pagos.",
+            type, pbpAmount.doubleValue()
+        );
+    }
+
+	/**
+     * Valida la cuota inicial mínima según normativa NCMV (7.5%)
+     */
+    public void validateMinimumDownPaymentNCMV(
+            BigDecimal propertyPrice,
+            BigDecimal downPayment) {
+        
+        // NCMV exige mínimo 7.5% de cuota inicial
+        BigDecimal minPercentage = BigDecimal.valueOf(7.5);
+        BigDecimal minAmount = propertyPrice.multiply(minPercentage)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        
+        if (downPayment.compareTo(minAmount) < 0) {
+            String message = String.format(
+                "La cuota inicial (S/ %.2f) es menor al mínimo requerido por el NCMV (7.5%% = S/ %.2f). " +
+                "La cuota inicial mínima debe ser al menos el 7.5%% del valor de la vivienda.",
+                downPayment.doubleValue(), minAmount.doubleValue()
+            );
+            throw new BadRequestException(message);
+        }
+        
+        log.debug("Validación cuota inicial NCMV exitosa - Mínimo 7.5% = S/ {}, Proporcionado: S/ {}",
+                minAmount, downPayment);
+    }
 
     /**
      * Calcula el porcentaje mínimo de cuota inicial según el precio de la vivienda
@@ -214,4 +342,6 @@ public class DownPaymentValidationService {
                 amountToFinance.subtract(maxAmount).doubleValue()
         );
     }
+
+    
 }

@@ -25,6 +25,8 @@ public class ClientResponse {
     private String phone;
     private String email;
     private BigDecimal monthlyIncome;
+    private String incomeCurrency;
+    private String incomeCurrencySymbol;
     private String occupation;
     private EvaluationStatus evaluationStatus;
     private String notes;

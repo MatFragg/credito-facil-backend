@@ -33,4 +33,9 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
+
+    /**
+     * Token de Cloudflare Turnstile para verificación anti-bot
+     */
+    private String turnstileToken;
 }

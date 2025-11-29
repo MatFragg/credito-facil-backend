@@ -9,8 +9,10 @@ import com.matfragg.creditofacil.api.dto.response.ApiResponse;
 import com.matfragg.creditofacil.api.dto.response.AuthResponse;
 import com.matfragg.creditofacil.api.dto.response.UserResponse;
 import com.matfragg.creditofacil.api.service.AuthService;
+import com.matfragg.creditofacil.api.service.TurnstileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final TurnstileService turnstileService;
 
     /**
      * Registra un nuevo usuario en el sistema
@@ -37,7 +40,12 @@ public class AuthController {
      */
     @PostMapping("/register")
     @Operation(summary = "Registrar nuevo usuario", description = "Crea una nueva cuenta de usuario. La cuenta estará inactiva hasta verificar el email.")
-    public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<ApiResponse<UserResponse>> register(
+            @Valid @RequestBody RegisterRequest request,
+            HttpServletRequest httpRequest) {
+        // Validar Turnstile antes de procesar el registro
+        turnstileService.validateToken(request.getTurnstileToken(), getClientIp(httpRequest));
+        
         UserResponse userResponse = authService.register(request);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -52,7 +60,12 @@ public class AuthController {
      */
     @PostMapping("/login")
     @Operation(summary = "Iniciar sesión", description = "Autentica un usuario y devuelve un token JWT")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<AuthResponse>> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest) {
+        // Validar Turnstile antes de procesar el login
+        turnstileService.validateToken(request.getTurnstileToken(), getClientIp(httpRequest));
+        
         AuthResponse authResponse = authService.login(request);
         return ResponseEntity.ok(ApiResponse.success("Login exitoso", authResponse));
     }
@@ -119,5 +132,23 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.success("Contraseña restablecida exitosamente", null));
+    }
+
+    /**
+     * Obtiene la IP del cliente considerando proxies y load balancers
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            // X-Forwarded-For puede contener múltiples IPs, tomar la primera
+            return xForwardedFor.split(",")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
     }
 }

@@ -31,4 +31,17 @@ public class BankEntityRequest {
     @DecimalMin(value = "0.01", message = "El porcentaje debe ser mayor que 0")
     @DecimalMax(value = "100.00", message = "El porcentaje no puede exceder 100%")
     private BigDecimal maxCoveragePct; // % máximo de financiamiento
+    
+    @DecimalMin(value = "0.0", message = "La tasa de desgravamen no puede ser negativa")
+    private BigDecimal desgravamenRate;
+    
+    private BigDecimal ncmvMinPropertyValue;
+    private BigDecimal ncmvMaxPropertyValue;
+    private BigDecimal ncmvMaxPropertyValueCRC;
+    
+    private BigDecimal pbpThresholdLow;
+    private BigDecimal pbpAmountStandard;
+    private BigDecimal pbpAmountPlus;
+    
+    private Boolean supportsNCMV;
 }

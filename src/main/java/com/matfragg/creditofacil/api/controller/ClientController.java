@@ -103,9 +103,10 @@ public class ClientController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener mi perfil", description = "Obtiene el perfil del cliente autenticado")
-    public ResponseEntity<ApiResponse<ClientResponse>> getMyProfile() {
-        ClientResponse clientResponse = clientService.getMyProfile();
-        return ResponseEntity.ok(ApiResponse.success(clientResponse));
+    public ResponseEntity<ApiResponse<Page<ClientResponse>>> getMyClients(
+            @ParameterObject @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+        Page<ClientResponse> clientResponses = clientService.getMyClients(pageable);
+        return ResponseEntity.ok(ApiResponse.success(clientResponses));
     }
 
 }

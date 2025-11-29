@@ -31,6 +31,13 @@ public class SimulationRequest {
     @Size(max = 200, message = "Simulation name cannot exceed 200 characters")
     private String simulationName;
 
+    // Currency configuration
+    @Pattern(regexp = "^(PEN|USD)$", message = "Currency must be PEN or USD")
+    private String currency;
+
+    @Builder.Default
+    private Boolean autoConvert = false;
+
     // Basic parameters
     @NotNull(message = "Property price is required")
     @DecimalMin(value = "0.01", message = "Price must be greater than 0")
@@ -65,6 +72,11 @@ public class SimulationRequest {
 
     @DecimalMin(value = "0.00", message = "Property insurance cannot be negative")
     private BigDecimal propertyInsurance;
+
+    @DecimalMin(value = "0.0000", message = "Desgravamen rate cannot be negative")
+    private BigDecimal desgravamenRate;
+    
+    private Boolean applyPBP;
 
     @DecimalMin(value = "0.00", message = "Opening commission cannot be negative")
     private BigDecimal openingCommission;

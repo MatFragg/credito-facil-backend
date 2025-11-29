@@ -47,6 +47,13 @@ public class Simulation {
     @Column(name = "simulation_code", unique = true)
     private String simulationCode;
 
+    // Currency configuration
+    @Column(name = "currency", length = 3, nullable = false)
+    private String currency = "PEN";
+
+    @Column(name = "exchange_rate_used", precision = 10, scale = 4)
+    private BigDecimal exchangeRateUsed = BigDecimal.ONE;
+
     // Basic parameters
     @Column(name = "property_price", nullable = false)
     private BigDecimal propertyPrice;
@@ -68,6 +75,12 @@ public class Simulation {
     @Column(name = "bonus_type")
     private BonusType bonusType;
 
+    @Column(name = "apply_pbp")
+    private Boolean applyPBP = false;
+
+    @Column(name = "pbp_amount")
+    private BigDecimal pbpAmount = BigDecimal.ZERO;
+
     // Credit parameters
     @Column(name = "annual_rate", nullable = false)
     private BigDecimal annualRate;
@@ -81,6 +94,12 @@ public class Simulation {
 
     @Column(name = "property_insurance")
     private BigDecimal propertyInsurance = new BigDecimal("50.00");
+
+    @Column(name = "desgravamen_rate", precision = 8, scale = 6)
+    private BigDecimal desgravamenRate = new BigDecimal("0.00049");
+    
+    @Column(name = "total_desgravamen_insurance", precision = 12, scale = 2)
+    private BigDecimal totalDesgravamenInsurance = BigDecimal.ZERO;
 
     @Column(name = "opening_commission")
     private BigDecimal openingCommission;

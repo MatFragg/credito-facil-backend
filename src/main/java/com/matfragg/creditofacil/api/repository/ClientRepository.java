@@ -16,6 +16,8 @@ import com.matfragg.creditofacil.api.model.entities.Client;
 public interface ClientRepository extends JpaRepository<Client, Long>, JpaSpecificationExecutor<Client> {
     Page<Client> findByUserId(Long userId, Pageable pageable);
 
+    List<Client> findAllByUserId(Long userId);
+
     Optional<Client> findByUserId(Long userId);
 
     List<Client> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(String firstName, String lastName);

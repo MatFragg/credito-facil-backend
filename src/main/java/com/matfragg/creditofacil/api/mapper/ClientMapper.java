@@ -14,6 +14,7 @@ public interface ClientMapper {
      * Convierte una entidad Client a ClientResponse DTO
      */
     @Mapping(target = "userId", source = "user.id")
+    @Mapping(target = "incomeCurrencySymbol", ignore = true)
     ClientResponse toResponse(Client client);
     
     /**

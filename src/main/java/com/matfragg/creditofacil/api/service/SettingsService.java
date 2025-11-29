@@ -17,5 +17,5 @@ public interface SettingsService {
 
     void delete(Long id);
 
-    SettingsResponse getMySettings(); // Obtener configuración del usuario autenticado
+    Page<SettingsResponse> getMySettings(Pageable pageable); // Obtener configuración del usuario autenticado
 }
