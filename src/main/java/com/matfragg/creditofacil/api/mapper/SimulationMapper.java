@@ -3,12 +3,18 @@ package com.matfragg.creditofacil.api.mapper;
 import com.matfragg.creditofacil.api.dto.request.SimulationRequest;
 import com.matfragg.creditofacil.api.dto.response.SimulationResponse;
 import com.matfragg.creditofacil.api.model.entities.Simulation;
+import com.matfragg.creditofacil.api.service.CurrencyService;
 import org.mapstruct.*;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Mapper(componentModel = "spring")
-public interface SimulationMapper {
+public abstract class SimulationMapper {
+
+    @Autowired
+    protected CurrencyService currencyService;
 
     @Mapping(target = "clientId", source = "client.id")
     @Mapping(target = "propertyId", source = "property.id")
@@ -19,9 +25,43 @@ public interface SimulationMapper {
     @Mapping(target = "monthlyPaymentAlternate", ignore = true)
     @Mapping(target = "alternateCurrency", ignore = true)
     @Mapping(target = "alternateCurrencySymbol", ignore = true)
-    SimulationResponse toResponse(Simulation simulation);
+    public abstract SimulationResponse toResponse(Simulation simulation);
 
-    List<SimulationResponse> toResponseList(List<Simulation> simulations);
+    @AfterMapping
+    protected void enrichWithCurrencyData(Simulation simulation, @MappingTarget SimulationResponse response) {
+        if (currencyService == null) return;
+        
+        String currency = simulation.getCurrency();
+        if (currency == null || currency.isBlank()) {
+            currency = "PEN";
+        }
+        
+        // Calcular símbolo de moneda
+        response.setCurrencySymbol(currencyService.getCurrencySymbol(currency));
+        
+        // Calcular moneda alternativa
+        String alternateCurrency = currencyService.getAlternateCurrency(currency);
+        response.setAlternateCurrency(alternateCurrency);
+        response.setAlternateCurrencySymbol(currencyService.getCurrencySymbol(alternateCurrency));
+        
+        // Calcular montos alternativos
+        BigDecimal propertyPrice = simulation.getPropertyPrice();
+        BigDecimal monthlyPayment = simulation.getMonthlyPayment();
+        
+        if (propertyPrice != null) {
+            response.setPropertyPriceAlternate(
+                currencyService.convert(propertyPrice, currency, alternateCurrency)
+            );
+        }
+        
+        if (monthlyPayment != null) {
+            response.setMonthlyPaymentAlternate(
+                currencyService.convert(monthlyPayment, currency, alternateCurrency)
+            );
+        }
+    }
+
+    public abstract List<SimulationResponse> toResponseList(List<Simulation> simulations);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "client", ignore = true)
@@ -47,7 +87,7 @@ public interface SimulationMapper {
     @Mapping(target = "npv", ignore = true)
     @Mapping(target = "irr", ignore = true)
     @Mapping(target = "tcea", ignore = true)
-    Simulation toEntity(SimulationRequest request);
+    public abstract Simulation toEntity(SimulationRequest request);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
@@ -74,5 +114,5 @@ public interface SimulationMapper {
     @Mapping(target = "npv", ignore = true)
     @Mapping(target = "irr", ignore = true)
     @Mapping(target = "tcea", ignore = true)
-    void updateEntityFromRequest(SimulationRequest request, @MappingTarget Simulation simulation);
+    public abstract void updateEntityFromRequest(SimulationRequest request, @MappingTarget Simulation simulation);
 }

@@ -10,6 +10,7 @@ import com.matfragg.creditofacil.api.mapper.PaymentScheduleMapper;
 import com.matfragg.creditofacil.api.mapper.SimulationMapper;
 import com.matfragg.creditofacil.api.model.entities.*;
 import com.matfragg.creditofacil.api.model.enums.BonusType;
+import com.matfragg.creditofacil.api.model.enums.SimulationStatus;
 import com.matfragg.creditofacil.api.repository.*;
 import com.matfragg.creditofacil.api.security.SecurityUtils;
 import com.matfragg.creditofacil.api.service.DownPaymentValidationService;
@@ -236,6 +237,15 @@ public class SimulationServiceImpl implements SimulationService {
         }
         // ==================== FIN DESGRAVAMEN ====================
         
+        // ==================== SEGURO DE RIESGO ====================
+        // Si se proporciona propertyInsuranceRate, se usa como porcentaje sobre el saldo
+        // Si no, se usa propertyInsurance como monto fijo
+        BigDecimal propertyInsuranceRate = request.getPropertyInsuranceRate();
+        BigDecimal propertyInsuranceAmount = request.getPropertyInsurance();
+        
+        log.info("Seguro riesgo - Tasa: {}, Monto fijo: {}", propertyInsuranceRate, propertyInsuranceAmount);
+        // ==================== FIN SEGURO DE RIESGO ====================
+        
         // 11. Generar cronograma de pagos usando el monto del préstamo (con gastos capitalizados)
         List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
                 loanAmount,  // ← CAMBIO: Usar monto con gastos capitalizados
@@ -243,7 +253,8 @@ public class SimulationServiceImpl implements SimulationService {
                 request.getTermYears(),
                 settings,
                 request.getLifeInsuranceRate(),
-                request.getPropertyInsurance(),
+                propertyInsuranceRate,   // Tasa de seguro riesgo (puede ser null)
+                propertyInsuranceAmount, // Monto fijo (fallback)
                 desgravamenRate // NUEVO PARÁMETRO
         );
 
@@ -258,17 +269,34 @@ public class SimulationServiceImpl implements SimulationService {
 
         // 13. Calcular seguros y total mensual (usando loanAmount para seguros)
         BigDecimal lifeInsurance = request.getLifeInsuranceRate()
-            .multiply(loanAmount)  // ← CAMBIO: Usar loanAmount
-            .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal propertyInsurance = request.getPropertyInsurance();
-        BigDecimal desgravamenFirst = desgravamenRate
-            .multiply(loanAmount)  // ← CAMBIO: Usar loanAmount
+            .multiply(loanAmount)
             .setScale(2, RoundingMode.HALF_UP);
         
+        // Calcular seguro de riesgo del primer mes (para mostrar en response)
+        BigDecimal propertyInsuranceFirst;
+        if (propertyInsuranceRate != null && propertyInsuranceRate.compareTo(BigDecimal.ZERO) > 0) {
+            // Si hay tasa, calcular sobre el saldo inicial
+            propertyInsuranceFirst = loanAmount.multiply(propertyInsuranceRate)
+                .setScale(2, RoundingMode.HALF_UP);
+        } else {
+            // Si no, usar monto fijo
+            propertyInsuranceFirst = propertyInsuranceAmount != null ? propertyInsuranceAmount : BigDecimal.ZERO;
+        }
+        
+        // El desgravamen YA está incluido en la cuota (monthlyPayment)
+        // porque se calculó con PAGO(TEP + desgravamen, n, PV)
+        // Solo lo calculamos para mostrarlo por separado
+        BigDecimal desgravamenFirst = desgravamenRate
+            .multiply(loanAmount)
+            .setScale(2, RoundingMode.HALF_UP);
+        
+        // Flujo total = Cuota + SegRie + lifeInsurance
+        // NO sumar desgravamen porque ya está en la cuota
+        // Excel: Flujo = Cuota + PP + SegRie + Comision + Portes + GasAdm
         BigDecimal totalMonthlyPayment = monthlyPayment
             .add(lifeInsurance)
-            .add(propertyInsurance)
-            .add(desgravamenFirst); // Incluir desgravamen
+            .add(propertyInsuranceFirst);
+        // NO incluir desgravamen - ya está en monthlyPayment
 
         // Los gastos adicionales ya están capitalizados, no se suman aparte para TCEA
         BigDecimal additionalCosts = initialCosts;
@@ -348,7 +376,8 @@ public class SimulationServiceImpl implements SimulationService {
                 .annualRate(request.getAnnualRate())
                 .termYears(request.getTermYears())
                 .lifeInsuranceRate(request.getLifeInsuranceRate())
-                .propertyInsurance(request.getPropertyInsurance())
+                .propertyInsurance(propertyInsuranceFirst) // Monto del primer mes (o fijo)
+                .propertyInsuranceRate(propertyInsuranceRate) // Tasa si se usó porcentaje
                 .openingCommission(request.getOpeningCommission())
                 .notaryFees(request.getNotaryFees())
                 .registrationFees(request.getRegistrationFees())
@@ -398,6 +427,10 @@ public class SimulationServiceImpl implements SimulationService {
     simulation.setSettings(settings);
     simulation.setCreatedAt(LocalDateTime.now());
 
+    // ✅ ASIGNAR CÓDIGO DE SIMULACIÓN Y STATUS
+    simulation.setSimulationCode(calculated.getSimulationCode());
+    simulation.setStatus(request.getStatus() != null ? request.getStatus() : SimulationStatus.DRAFT);
+
     // ✅ ASIGNAR TODOS LOS CAMPOS CALCULADOS
     simulation.setAmountToFinance(calculated.getAmountToFinance());
     simulation.setLoanAmount(calculated.getLoanAmount()); // ✅ MONTO PRÉSTAMO (con gastos capitalizados)
@@ -414,6 +447,7 @@ public class SimulationServiceImpl implements SimulationService {
     simulation.setTotalLifeInsurance(calculated.getTotalLifeInsurance()); // ✅ SEGURO VIDA
     simulation.setTotalPropertyInsurance(calculated.getTotalPropertyInsurance()); // ✅ SEGURO PROPIEDAD
     simulation.setTotalDesgravamenInsurance(calculated.getTotalDesgravamenInsurance()); // ✅ DESGRAVAMEN TOTAL
+    simulation.setPropertyInsuranceRate(calculated.getPropertyInsuranceRate()); // ✅ TASA SEGURO RIESGO
     simulation.setNpv(calculated.getNpv());
     simulation.setIrr(calculated.getIrr());
     simulation.setTcea(calculated.getTcea());
@@ -429,7 +463,16 @@ public class SimulationServiceImpl implements SimulationService {
     // ✅ NO guardar cronograma en DB - se genera bajo demanda
     // Esto ahorra ~300 registros por simulación de 25 años
 
-    return simulationMapper.toResponse(saved);
+    // Retornar el response calculado con el ID de la entidad guardada
+    SimulationResponse response = simulationMapper.toResponse(saved);
+    // Copiar los campos alternativos del cálculo original
+    response.setPropertyPriceAlternate(calculated.getPropertyPriceAlternate());
+    response.setMonthlyPaymentAlternate(calculated.getMonthlyPaymentAlternate());
+    response.setAlternateCurrency(calculated.getAlternateCurrency());
+    response.setAlternateCurrencySymbol(calculated.getAlternateCurrencySymbol());
+    response.setCurrencySymbol(calculated.getCurrencySymbol());
+    
+    return response;
 }
 
     @Override
@@ -534,7 +577,7 @@ public class SimulationServiceImpl implements SimulationService {
 
         Settings settings = simulation.getSettings();
 
-        // ✅ CORRECCIÓN: Incluir desgravamenRate (7 parámetros)
+        // ✅ CORRECCIÓN: Incluir desgravamenRate
         BigDecimal desgravamenRate = simulation.getDesgravamenRate();
         if (desgravamenRate == null) {
             desgravamenRate = BigDecimal.ZERO;
@@ -542,13 +585,14 @@ public class SimulationServiceImpl implements SimulationService {
 
         // Generar cronograma en tiempo real (no almacenado en DB)
         List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
-                simulation.getAmountToFinance(),
+                simulation.getLoanAmount() != null ? simulation.getLoanAmount() : simulation.getAmountToFinance(),
                 simulation.getAnnualRate(),
                 simulation.getTermYears(),
                 settings,
                 simulation.getLifeInsuranceRate(),
-                simulation.getPropertyInsurance(),
-                desgravamenRate  // ✅ NUEVO PARÁMETRO
+                simulation.getPropertyInsuranceRate(), // Tasa de seguro riesgo (puede ser null)
+                simulation.getPropertyInsurance(),     // Monto fijo (fallback)
+                desgravamenRate
         );
 
         log.debug("Cronograma de {} pagos generado exitosamente", schedule.size());

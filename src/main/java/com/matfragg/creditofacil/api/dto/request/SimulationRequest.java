@@ -73,6 +73,11 @@ public class SimulationRequest {
     @DecimalMin(value = "0.00", message = "Property insurance cannot be negative")
     private BigDecimal propertyInsurance;
 
+    // Tasa de seguro de riesgo (porcentaje, ej: 0.0034 para 0.34%)
+    // Si se proporciona, se calcula sobre el saldo. Si no, usa propertyInsurance como monto fijo.
+    @DecimalMin(value = "0.0000", message = "Property insurance rate cannot be negative")
+    private BigDecimal propertyInsuranceRate;
+
     @DecimalMin(value = "0.0000", message = "Desgravamen rate cannot be negative")
     private BigDecimal desgravamenRate;
     

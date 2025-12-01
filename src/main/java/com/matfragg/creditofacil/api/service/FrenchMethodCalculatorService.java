@@ -25,6 +25,8 @@ public interface FrenchMethodCalculatorService {
 
     /**
      * Calcula el cronograma completo de pagos
+     * @param propertyInsuranceRate Tasa de seguro de riesgo (porcentaje). Si es null, usa propertyInsuranceAmount como monto fijo.
+     * @param propertyInsuranceAmount Monto fijo de seguro de riesgo. Solo se usa si propertyInsuranceRate es null.
      */
     List<PaymentSchedule> calculatePaymentSchedule(
             BigDecimal amountToFinance,
@@ -32,7 +34,8 @@ public interface FrenchMethodCalculatorService {
             Integer termYears,
             Settings settings,
             BigDecimal lifeInsurance,
-            BigDecimal propertyInsurance,
+            BigDecimal propertyInsuranceRate,
+            BigDecimal propertyInsuranceAmount,
             BigDecimal desgravamenRate
     );
 

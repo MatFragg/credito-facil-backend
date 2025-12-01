@@ -31,7 +31,9 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             Integer termYears,
             Settings settings,
             BigDecimal lifeInsuranceRate,
-            BigDecimal propertyInsuranceAmount, BigDecimal desgravamenRate) {
+            BigDecimal propertyInsuranceRate,   // Tasa de seguro riesgo (ej: 0.0034 para 0.34%)
+            BigDecimal propertyInsuranceAmount, // Monto fijo (fallback si rate es null)
+            BigDecimal desgravamenRate) {
 
         log.debug("Calculando cronograma de pagos para monto: {} a {} años", amountToFinance, termYears);
 
@@ -71,6 +73,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
                 monthlyRate,
                 totalMonths,
                 lifeInsuranceRate,
+                propertyInsuranceRate,
                 propertyInsuranceAmount,
                 desgravamenRate
         );
@@ -270,8 +273,9 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
                 monthlyRate,
                 totalMonths,
                 lifeInsuranceRate,
-                propertyInsurance,
-                BigDecimal.ZERO
+                null,               // Sin tasa de porcentaje
+                propertyInsurance,  // Usar como monto fijo
+                BigDecimal.ZERO     // Sin desgravamen
         );
     }
 
@@ -282,22 +286,47 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
         BigDecimal monthlyPayment, // Cuota base (Capital + Interés)
         BigDecimal monthlyRate,
         Integer totalMonths,
-        BigDecimal lifeInsuranceRate,     // Tasa (ej: 0.00045)
-        BigDecimal propertyInsuranceAmount, // Monto fijo (ej: 40.00)
+        BigDecimal lifeInsuranceRate,       // Tasa (ej: 0.00045)
+        BigDecimal propertyInsuranceRate,   // Tasa de seguro riesgo (ej: 0.0034 para 0.34%)
+        BigDecimal propertyInsuranceAmount, // Monto fijo (fallback si rate es null)
         BigDecimal desgravamenRate 
     ) {
 
         List<PaymentSchedule> schedule = new ArrayList<>();
         BigDecimal balance = principal;
         LocalDate currentDate = LocalDate.now().plusMonths(1);
+        
+        // Determinar si usar tasa o monto fijo para seguro de riesgo
+        boolean usePropertyInsuranceRate = propertyInsuranceRate != null 
+                && propertyInsuranceRate.compareTo(BigDecimal.ZERO) > 0;
+        
+        log.debug("Seguro riesgo: {} (tasa: {}, monto fijo: {})", 
+                usePropertyInsuranceRate ? "PORCENTAJE" : "MONTO FIJO",
+                propertyInsuranceRate, propertyInsuranceAmount);
 
         for (int month = 1; month <= totalMonths; month++) {
             PaymentSchedule payment = new PaymentSchedule();
             payment.setPaymentNumber(month);
             payment.setPaymentDate(currentDate);
             payment.setInitialBalance(balance.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
-            payment.setPeriodType(PeriodType.ORDINARY); 
-            payment.setPropertyInsurance(propertyInsuranceAmount.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
+            payment.setPeriodType(PeriodType.ORDINARY);
+            
+            // ==================== SEGURO DE RIESGO (Excel: SegRie) ====================
+            // Si hay tasa: SegRie = Saldo * %SeguroRiesgo (como en Excel)
+            // Si no hay tasa: usar monto fijo
+            BigDecimal propertyInsurancePayment;
+            if (usePropertyInsuranceRate) {
+                // Excel: SegRie = -SII * pSegRie (sobre el saldo)
+                propertyInsurancePayment = balance.multiply(propertyInsuranceRate)
+                        .setScale(MONEY_SCALE, RoundingMode.HALF_UP)
+                        .max(BigDecimal.ZERO);
+            } else {
+                propertyInsurancePayment = propertyInsuranceAmount != null 
+                        ? propertyInsuranceAmount.setScale(MONEY_SCALE, RoundingMode.HALF_UP) 
+                        : BigDecimal.ZERO;
+            }
+            payment.setPropertyInsurance(propertyInsurancePayment);
+            // ==================== FIN SEGURO DE RIESGO ====================
 
             BigDecimal interest = balance.multiply(monthlyRate)
                     .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
@@ -333,7 +362,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             // Excel: Flujo = Cuota + PP + SegRie + Comision + Portes + GasAdm
             BigDecimal totalPayment = monthlyPayment
                     .add(lifeInsurancePayment)
-                    .add(propertyInsuranceAmount);
+                    .add(propertyInsurancePayment);
             // NO sumar desgravamenPayment porque ya está incluido en monthlyPayment
 
             BigDecimal newBalance = balance.subtract(principalPayment);

@@ -98,6 +98,10 @@ public class Simulation {
 
     @Column(name = "property_insurance")
     private BigDecimal propertyInsurance = new BigDecimal("50.00");
+    
+    // Tasa de seguro de riesgo (si se usa porcentaje en vez de monto fijo)
+    @Column(name = "property_insurance_rate", precision = 8, scale = 6)
+    private BigDecimal propertyInsuranceRate;
 
     @Column(name = "desgravamen_rate", precision = 8, scale = 6)
     private BigDecimal desgravamenRate = new BigDecimal("0.00049");

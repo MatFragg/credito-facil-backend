@@ -43,6 +43,7 @@ public class SimulationResponse {
     private Integer termYears;
     private BigDecimal lifeInsuranceRate;
     private BigDecimal propertyInsurance;
+    private BigDecimal propertyInsuranceRate; // Tasa de seguro de riesgo (si se usó porcentaje)
     private BigDecimal desgravamenRate;
     private BigDecimal totalDesgravamenInsurance;
     private Boolean applyPBP;

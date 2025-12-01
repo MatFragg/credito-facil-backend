@@ -15,7 +15,7 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
 
     private static final int SCALE = 15; // Mayor precisión para cálculos intermedios
     private static final int MONEY_SCALE = 2;
-    private static final int RATE_SCALE = 4; // Para tasas en porcentaje (ej: 14.7233%)
+    private static final int RATE_SCALE = 5; // Para tasas en porcentaje (ej: 14.72334%)
     private static final BigDecimal DEFAULT_DISCOUNT_RATE = new BigDecimal("0.10"); // 10% anual
 
     @Override
@@ -36,35 +36,31 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
         // Convertir tasa anual a mensual: (1 + TEA)^(1/12) - 1
         double monthlyDiscountRate = Math.pow(1 + effectiveDiscountRate.doubleValue(), 1.0 / 12.0) - 1;
 
-        // VAN = Flujo_0 + VNA(tasa, flujos)
-        // Flujo_0 = -Préstamo (inversión inicial negativa desde perspectiva del banco)
-        // Pero desde perspectiva del prestatario: Flujo_0 = +Préstamo (dinero recibido)
-        // Excel: VAN = Prestamo + VNA(COKi, Flujo)
+        // VAN desde perspectiva del PRESTATARIO:
+        // Flujo_0 = +Préstamo (dinero recibido)
+        // Flujos 1..n = -Pagos (dinero que sale)
+        // VAN = Préstamo - VP(Pagos)
+        // Si VAN > 0: El préstamo es conveniente (costo < costo oportunidad)
+        // Si VAN < 0: El préstamo es caro (costo > costo oportunidad)
         
-        BigDecimal van = amountToFinance; // Flujo inicial positivo (dinero recibido)
+        // Excel: VAN = Prestamo + VNA(COKi, -Flujo)
+        // Donde Flujo son valores positivos (pagos), entonces -Flujo son negativos
+        
+        double van = amountToFinance.doubleValue(); // Flujo inicial positivo
 
-        // Sumar valor presente de cada flujo (pagos son negativos)
+        // Restar valor presente de cada pago
         for (int t = 1; t <= schedule.size(); t++) {
             PaymentSchedule payment = schedule.get(t - 1);
-            BigDecimal cashFlow = payment.getTotalPayment().negate(); // Pago es salida de dinero
+            double cashFlow = payment.getTotalPayment().doubleValue(); // Pago positivo
 
             double discountFactor = Math.pow(1 + monthlyDiscountRate, t);
-            BigDecimal presentValue = cashFlow.divide(
-                    BigDecimal.valueOf(discountFactor),
-                    SCALE,
-                    RoundingMode.HALF_UP
-            );
+            double presentValue = cashFlow / discountFactor;
 
-            van = van.add(presentValue);
+            van -= presentValue; // Restar porque son salidas de dinero
         }
 
-        // El VAN del Excel muestra valor absoluto negativo, nosotros lo mostramos positivo
-        // Excel: -49,352.87 significa que el prestatario "pierde" ese valor
-        // Invertimos el signo para mostrar como positivo
-        van = van.negate();
-
-        log.debug("VAN calculado: {}", van.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
-        return van.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        log.debug("VAN calculado: {}", van);
+        return BigDecimal.valueOf(van).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }
     
     @Override

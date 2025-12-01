@@ -1,0 +1,58 @@
+# render.yaml - Blueprint para Render
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # API Backend
+  - type: web
+    name: creditofacil-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon # o 'frankfurt' para Europa
+    plan: free # o 'starter' para producción
+    healthCheckPath: /actuator/health
+    envVars:
+      # Base de datos (conexión a Render PostgreSQL)
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: creditofacil-db
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: creditofacil-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: creditofacil-db
+          property: password
+      
+      # JWT Secret (configurar manualmente en dashboard)
+      - key: APP_JWT_SECRET
+        sync: false
+      
+      # Cloudinary (opcional - configurar en dashboard)
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      
+      # Turnstile (opcional)
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_ENABLED
+        value: "false"
+      
+      # Currency
+      - key: EXCHANGE_RATE_USD_PEN
+        value: "3.75"
+      
+      # Java optimizations para contenedores
+      - key: JAVA_OPTS
+        value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+databases:
+  - name: creditofacil-db
+    databaseName: creditofacil
+    plan: free # o 'starter' para producción
+    region: oregon

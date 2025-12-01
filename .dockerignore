@@ -1,0 +1,38 @@
+# Archivos de IDE
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# Archivos de build
+target/
+!target/*.jar
+build/
+
+# Logs
+*.log
+logs/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno
+.env
+*.env.local
+
+# Git
+.git/
+.gitignore
+
+# Documentación
+docs/
+*.md
+!README.md
+
+# Tests
+src/test/
+
+# Maven wrapper (se copia explícitamente)
+!mvnw
+!.mvn/

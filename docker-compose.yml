@@ -1,0 +1,61 @@
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: creditofacil-db
+    environment:
+      POSTGRES_DB: creditofacil
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d creditofacil"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - creditofacil-network
+
+  # Backend Spring Boot
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: creditofacil-api
+    ports:
+      - "8091:8091"
+    environment:
+      # Base de datos
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/creditofacil
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres123}
+      
+      # JWT
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-Y0uR_Sup3r_S3cr3t_K3y_Th1s_1s_64_Charact3rs_L0ng_And_Saf3_F0r_HS512_Use!}
+      
+      # Cloudinary (opcional)
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      
+      # Turnstile (opcional)
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TURNSTILE_ENABLED: ${TURNSTILE_ENABLED:-false}
+      
+      # Currency
+      EXCHANGE_RATE_USD_PEN: ${EXCHANGE_RATE_USD_PEN:-3.75}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - creditofacil-network
+
+volumes:
+  postgres_data:
+
+networks:
+  creditofacil-network:
+    driver: bridge
