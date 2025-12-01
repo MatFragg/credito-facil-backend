@@ -57,9 +57,12 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
         // Paso 3: Calcular número total de pagos
         int totalMonths = termYears * 12;
 
-        // Paso 4: Calcular cuota mensual fija (sin seguros)
-        BigDecimal baseMonthlyPayment = calculateMonthlyPayment(amountToFinance, monthlyRate, totalMonths);
-        log.debug("Cuota base calculada: {}", baseMonthlyPayment);
+        // Paso 4: Calcular cuota mensual fija INCLUYENDO desgravamen en la tasa
+        // Fórmula Excel: PAGO(TEP + pSegDesPer, N, SII, 0, 0)
+        BigDecimal desgravamenRateSafe = desgravamenRate != null ? desgravamenRate : BigDecimal.ZERO;
+        BigDecimal baseMonthlyPayment = calculateMonthlyPaymentWithDesgravamen(
+                amountToFinance, monthlyRate, totalMonths, desgravamenRateSafe);
+        log.debug("Cuota base calculada (con desgravamen en tasa): {}", baseMonthlyPayment);
 
         // Paso 5: Generar cronograma inicial
         List<PaymentSchedule> schedule = generateInitialSchedule(
@@ -83,8 +86,27 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
 
     @Override
     public BigDecimal calculateMonthlyPayment(BigDecimal amountToFinance, BigDecimal monthlyRate, Integer totalMonths) {
-        // ✅ USAR double PARA PRECISIÓN EN pow() GRANDE
+        // Llamar al método con desgravamen = 0 para compatibilidad
+        return calculateMonthlyPaymentWithDesgravamen(amountToFinance, monthlyRate, totalMonths, BigDecimal.ZERO);
+    }
+    
+    /**
+     * Calcula la cuota mensual incluyendo el seguro de desgravamen en la tasa.
+     * Fórmula Excel: PAGO(TEP + pSegDesPer, N, SII, 0, 0)
+     * Equivalente: PV * [(r)(1+r)^n] / [(1+r)^n - 1] donde r = TEP + %desgravamen
+     */
+    public BigDecimal calculateMonthlyPaymentWithDesgravamen(
+            BigDecimal amountToFinance, 
+            BigDecimal monthlyRate, 
+            Integer totalMonths,
+            BigDecimal desgravamenRate) {
+        
+        // Tasa combinada: TEP + %SeguroDesgravamen (como en Excel)
         double r = monthlyRate.doubleValue();
+        if (desgravamenRate != null) {
+            r = r + desgravamenRate.doubleValue();
+        }
+        
         double pv = amountToFinance.doubleValue();
         double n = totalMonths.doubleValue();
         
@@ -92,8 +114,7 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
         double powTerm = Math.pow(1.0 + r, n);
         double monthlyPayment = pv * (r * powTerm) / (powTerm - 1.0);
         
-        // Dentro del método
-        log.info("Cuota calculada: {} para PV: {}, r: {}, n: {}", 
+        log.info("Cuota calculada: {} para PV: {}, r (TEP+desgrav): {}, n: {}", 
                 BigDecimal.valueOf(monthlyPayment), pv, r, n);
         return BigDecimal.valueOf(monthlyPayment)
             .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
@@ -281,18 +302,9 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             BigDecimal interest = balance.multiply(monthlyRate)
                     .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
 
-            BigDecimal principalPayment = monthlyPayment.subtract(interest);
-
-            if (month == totalMonths) {
-                principalPayment = balance;
-                monthlyPayment = principalPayment.add(interest);
-            }
-
-            BigDecimal lifeInsurancePayment = balance.multiply(lifeInsuranceRate)
-                    .setScale(MONEY_SCALE, RoundingMode.HALF_UP)
-                    .max(BigDecimal.ZERO); 
-            
-            // ==================== NUEVO: CALCULAR DESGRAVAMEN ====================
+            // ==================== CALCULAR DESGRAVAMEN ====================
+            // El desgravamen se calcula sobre el saldo inicial
+            // SegDes = -SII * pSegDesPer (como en Excel)
             BigDecimal desgravamenPayment = BigDecimal.ZERO;
             if (desgravamenRate != null && desgravamenRate.compareTo(BigDecimal.ZERO) > 0) {
                 desgravamenPayment = balance.multiply(desgravamenRate)
@@ -302,10 +314,27 @@ public class FrenchMethodCalculatorServiceImpl implements FrenchMethodCalculator
             payment.setDesgravamenInsurance(desgravamenPayment);
             // ==================== FIN DESGRAVAMEN ====================
 
+            // Amortización = Cuota - Interés - Desgravamen (como en Excel)
+            // Excel: K26 = Cuota - I - SegDes
+            BigDecimal principalPayment = monthlyPayment.subtract(interest).subtract(desgravamenPayment);
+
+            if (month == totalMonths) {
+                // Ajustar última cuota para cerrar el saldo
+                principalPayment = balance;
+                // Recalcular cuota final
+                monthlyPayment = principalPayment.add(interest).add(desgravamenPayment);
+            }
+
+            BigDecimal lifeInsurancePayment = balance.multiply(lifeInsuranceRate)
+                    .setScale(MONEY_SCALE, RoundingMode.HALF_UP)
+                    .max(BigDecimal.ZERO);
+
+            // Total = Cuota + SegRie (el desgravamen YA está en la cuota)
+            // Excel: Flujo = Cuota + PP + SegRie + Comision + Portes + GasAdm
             BigDecimal totalPayment = monthlyPayment
                     .add(lifeInsurancePayment)
-                    .add(propertyInsuranceAmount)
-                    .add(desgravamenPayment);  // INCLUIR DESGRAVAMEN
+                    .add(propertyInsuranceAmount);
+            // NO sumar desgravamenPayment porque ya está incluido en monthlyPayment
 
             BigDecimal newBalance = balance.subtract(principalPayment);
             if (newBalance.compareTo(BigDecimal.ZERO) < 0) {

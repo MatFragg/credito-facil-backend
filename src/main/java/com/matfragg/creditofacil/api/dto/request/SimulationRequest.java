@@ -87,5 +87,10 @@ public class SimulationRequest {
     @DecimalMin(value = "0.00", message = "Registration fees cannot be negative")
     private BigDecimal registrationFees;
 
+    // Tasa de descuento para cálculo de VAN (costo de oportunidad)
+    @DecimalMin(value = "0.00", message = "Discount rate cannot be negative")
+    @DecimalMax(value = "100.00", message = "Discount rate cannot exceed 100%")
+    private BigDecimal discountRate;
+
     private SimulationStatus status;
 }

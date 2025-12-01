@@ -64,6 +64,10 @@ public class Simulation {
     @Column(name = "amount_to_finance", nullable = false)
     private BigDecimal amountToFinance;
 
+    // Monto del préstamo (amountToFinance + gastos iniciales capitalizados)
+    @Column(name = "loan_amount", precision = 12, scale = 2)
+    private BigDecimal loanAmount;
+
     // Government Bonus (Bono Techo Propio)
     @Column(name = "apply_government_bonus", nullable = false)
     private Boolean applyGovernmentBonus = false;
@@ -100,6 +104,10 @@ public class Simulation {
     
     @Column(name = "total_desgravamen_insurance", precision = 12, scale = 2)
     private BigDecimal totalDesgravamenInsurance = BigDecimal.ZERO;
+
+    // Tasa de descuento para cálculo de VAN (costo de oportunidad)
+    @Column(name = "discount_rate", precision = 5, scale = 2)
+    private BigDecimal discountRate = BigDecimal.TEN; // Default 10%
 
     @Column(name = "opening_commission")
     private BigDecimal openingCommission;

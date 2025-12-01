@@ -13,41 +13,41 @@ import java.util.List;
 @Slf4j
 public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsService {
 
-    private static final int SCALE = 10;
+    private static final int SCALE = 15; // Mayor precisión para cálculos intermedios
     private static final int MONEY_SCALE = 2;
+    private static final int RATE_SCALE = 4; // Para tasas en porcentaje (ej: 14.7233%)
     private static final BigDecimal DEFAULT_DISCOUNT_RATE = new BigDecimal("0.10"); // 10% anual
 
     @Override
     public BigDecimal calculateVAN(
         BigDecimal amountToFinance,
         List<PaymentSchedule> schedule,
-        BigDecimal discountRate) { // p. ej. el usuario podría pasar '10' por 10%
+        BigDecimal discountRate) {
 
         log.debug("Calculando VAN...");
 
         BigDecimal effectiveDiscountRate;
         if (discountRate == null) {
-            // Usa la tasa por defecto (0.10) directamente
             effectiveDiscountRate = DEFAULT_DISCOUNT_RATE;
         } else {
-            // Si el usuario pasa un porcentaje (ej: 10), lo convertimos a decimal (0.10)
             effectiveDiscountRate = discountRate.divide(BigDecimal.valueOf(100), SCALE, RoundingMode.HALF_UP);
         }
 
-        // Convertir tasa anual (0.10) a mensual
-        double monthlyDiscountRate = Math.pow(1 + effectiveDiscountRate.doubleValue(), 1.0 / 12) - 1;
+        // Convertir tasa anual a mensual: (1 + TEA)^(1/12) - 1
+        double monthlyDiscountRate = Math.pow(1 + effectiveDiscountRate.doubleValue(), 1.0 / 12.0) - 1;
 
-        // VAN comienza con la inversión inicial negativa
-        BigDecimal van = amountToFinance.negate();
+        // VAN = Flujo_0 + VNA(tasa, flujos)
+        // Flujo_0 = -Préstamo (inversión inicial negativa desde perspectiva del banco)
+        // Pero desde perspectiva del prestatario: Flujo_0 = +Préstamo (dinero recibido)
+        // Excel: VAN = Prestamo + VNA(COKi, Flujo)
+        
+        BigDecimal van = amountToFinance; // Flujo inicial positivo (dinero recibido)
 
-        // Sumar valor presente de cada flujo
+        // Sumar valor presente de cada flujo (pagos son negativos)
         for (int t = 1; t <= schedule.size(); t++) {
             PaymentSchedule payment = schedule.get(t - 1);
-            
-            // Esta línea ya la habías corregido, usa el flujo total
-            BigDecimal cashFlow = payment.getTotalPayment(); 
+            BigDecimal cashFlow = payment.getTotalPayment().negate(); // Pago es salida de dinero
 
-            // Valor presente del flujo
             double discountFactor = Math.pow(1 + monthlyDiscountRate, t);
             BigDecimal presentValue = cashFlow.divide(
                     BigDecimal.valueOf(discountFactor),
@@ -58,6 +58,11 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
             van = van.add(presentValue);
         }
 
+        // El VAN del Excel muestra valor absoluto negativo, nosotros lo mostramos positivo
+        // Excel: -49,352.87 significa que el prestatario "pierde" ese valor
+        // Invertimos el signo para mostrar como positivo
+        van = van.negate();
+
         log.debug("VAN calculado: {}", van.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
         return van.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }
@@ -67,43 +72,26 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
             BigDecimal amountToFinance,
             List<PaymentSchedule> schedule) {
 
-        log.debug("Calculando TIR mediante método de bisección");
+        log.debug("Calculando TIR mediante método de Newton-Raphson");
 
-        // TIR es la tasa que hace VAN = 0
-        // Usamos método de bisección para encontrarla
-
-        double minRate = 0.0;
-        double maxRate = 1.0; // 100%
-        double tolerance = 0.0001;
-        int maxIterations = 100;
-        int iteration = 0;
-
-        while (maxRate - minRate > tolerance && iteration < maxIterations) {
-            double midRate = (minRate + maxRate) / 2.0;
-
-            // Calcular VAN con esta tasa
-            BigDecimal testVAN = calculateVANWithRate(amountToFinance, schedule, midRate);
-
-            if (testVAN.compareTo(BigDecimal.ZERO) > 0) {
-                // VAN positivo, aumentar tasa
-                minRate = midRate;
-            } else {
-                // VAN negativo, disminuir tasa
-                maxRate = midRate;
-            }
-
-            iteration++;
+        // Construir array de flujos
+        double[] cashFlows = new double[schedule.size() + 1];
+        cashFlows[0] = amountToFinance.doubleValue(); // Flujo inicial positivo
+        
+        for (int i = 0; i < schedule.size(); i++) {
+            cashFlows[i + 1] = -schedule.get(i).getTotalPayment().doubleValue(); // Pagos negativos
         }
 
-        double monthlyTIR = (minRate + maxRate) / 2.0;
+        // Calcular TIR usando Newton-Raphson (más preciso que bisección)
+        double monthlyTIR = calculateIRRNewtonRaphson(cashFlows);
 
-        // Convertir TIR mensual a anual: TIR_anual = (1 + TIR_mensual)^12 - 1
+        // Convertir TIR mensual a anual: TCEA = (1 + TIR_mensual)^12 - 1
         double annualTIR = Math.pow(1 + monthlyTIR, 12) - 1;
 
         BigDecimal tirPercentage = BigDecimal.valueOf(annualTIR * 100)
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                .setScale(RATE_SCALE, RoundingMode.HALF_UP);
 
-        log.debug("TIR calculada: {}%", tirPercentage);
+        log.debug("TIR mensual: {}%, TIR anual: {}%", monthlyTIR * 100, tirPercentage);
         return tirPercentage;
     }
 
@@ -115,50 +103,27 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
 
         log.debug("Calculando TCEA incluyendo todos los costos");
 
-        // TCEA es la TIR considerando todos los costos
-        // Flujo inicial = Monto recibido - Costos iniciales
-        // Flujos mensuales = Pagos (que ya incluyen seguros)
-
-        BigDecimal initialCashFlow = amountToFinance.subtract(additionalCosts);
-
-
-        log.debug("Flujo inicial (initialCashFlow): {}", initialCashFlow);
-        log.debug("Costos adicionales (additionalCosts): {}", additionalCosts);
-        log.debug("Monto financiado (amountToFinance): {}", amountToFinance);
-        // Usamos el mismo método de bisección que TIR
-        double minRate = 0.0;
-        double maxRate = 2.0; // 200% para dar margen
-        double tolerance = 0.0001;
-        int maxIterations = 100;
-        int iteration = 0;
-
-        while (maxRate - minRate > tolerance && iteration < maxIterations) {
-            double midRate = (minRate + maxRate) / 2.0;
-
-            // Calcular NPV con esta tasa
-            BigDecimal testNPV = calculateNPVForTCEA(initialCashFlow, schedule, midRate);
-
-            if (testNPV.compareTo(BigDecimal.ZERO) > 0) {
-                maxRate = midRate; // ✅ CORRECTO
-            } else {
-                minRate = midRate; // ✅ CORRECTO
-            }
-
-            iteration++;
-
-            log.debug("Iteración {}: minRate = {}, maxRate = {}, midRate = {}", iteration, minRate, maxRate, midRate);
-            log.debug("NPV calculado con midRate {}: {}", midRate, testNPV);
+        // TCEA considera el flujo neto recibido (préstamo - costos iniciales)
+        // Pero los costos ya están capitalizados en amountToFinance, entonces:
+        // Flujo_0 = amountToFinance (ya incluye costos capitalizados)
+        
+        // Construir array de flujos igual que TIR
+        // Excel: TCEA = (1 + TIR)^NCxA - 1, donde NCxA = 12 para mensual
+        double[] cashFlows = new double[schedule.size() + 1];
+        cashFlows[0] = amountToFinance.doubleValue();
+        
+        for (int i = 0; i < schedule.size(); i++) {
+            cashFlows[i + 1] = -schedule.get(i).getTotalPayment().doubleValue();
         }
 
-        double monthlyTCEA = (minRate + maxRate) / 2.0;
+        // Calcular TIR mensual
+        double monthlyTIR = calculateIRRNewtonRaphson(cashFlows);
 
+        // TCEA = (1 + TIR_mensual)^12 - 1 (igual que Excel)
+        double annualTCEA = Math.pow(1 + monthlyTIR, 12) - 1;
 
-        // Convertir a tasa anual
-        double annualTCEA = Math.pow(1 + monthlyTCEA, 12) - 1;
-        log.debug("TCEA mensual (monthlyTCEA): {}", monthlyTCEA);
-        log.debug("TCEA anual (annualTCEA): {}", annualTCEA);
         BigDecimal tceaPercentage = BigDecimal.valueOf(annualTCEA * 100)
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                .setScale(RATE_SCALE, RoundingMode.HALF_UP);
 
         log.debug("TCEA calculada: {}%", tceaPercentage);
         return tceaPercentage;
@@ -166,6 +131,47 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
 
     // ============ Métodos Privados ============
 
+    /**
+     * Calcula la TIR usando el método de Newton-Raphson.
+     * Más preciso y rápido que bisección para funciones suaves.
+     */
+    private double calculateIRRNewtonRaphson(double[] cashFlows) {
+        double guess = 0.01; // Estimación inicial: 1% mensual
+        double tolerance = 1e-10; // Alta precisión
+        int maxIterations = 1000;
+        
+        for (int i = 0; i < maxIterations; i++) {
+            double npv = 0;
+            double dnpv = 0; // Derivada del NPV
+            
+            for (int t = 0; t < cashFlows.length; t++) {
+                double factor = Math.pow(1 + guess, t);
+                npv += cashFlows[t] / factor;
+                if (t > 0) {
+                    dnpv -= t * cashFlows[t] / Math.pow(1 + guess, t + 1);
+                }
+            }
+            
+            if (Math.abs(dnpv) < 1e-15) {
+                // Evitar división por cero
+                break;
+            }
+            
+            double newGuess = guess - npv / dnpv;
+            
+            if (Math.abs(newGuess - guess) < tolerance) {
+                return newGuess;
+            }
+            
+            guess = newGuess;
+        }
+        
+        return guess;
+    }
+
+    /**
+     * Calcula VAN con una tasa específica (para uso interno)
+     */
     private BigDecimal calculateVANWithRate(
             BigDecimal initialInvestment,
             List<PaymentSchedule> schedule,
@@ -188,34 +194,5 @@ public class FinancialIndicatorsServiceImpl implements FinancialIndicatorsServic
         }
 
         return van;
-    }
-
-    private BigDecimal calculateNPVForTCEA(
-            BigDecimal initialCashFlow,
-            List<PaymentSchedule> schedule,
-            double monthlyRate) {
-
-        // NPV = Flujo_0 + Σ(-Pago_t / (1 + r)^t)
-        // Flujo_0 es positivo (dinero recibido)
-        // Pagos son negativos (dinero que se paga)
-
-        BigDecimal npv = initialCashFlow;
-
-        for (int t = 1; t <= schedule.size(); t++) {
-            PaymentSchedule payment = schedule.get(t - 1);
-            
-            BigDecimal cashFlow = payment.getTotalPayment().negate();
-
-            double discountFactor = Math.pow(1 + monthlyRate, t);
-            BigDecimal presentValue = cashFlow.divide(
-                    BigDecimal.valueOf(discountFactor),
-                    SCALE,
-                    RoundingMode.HALF_UP
-            );
-
-            npv = npv.add(presentValue);
-        }
-
-        return npv;
     }
 }

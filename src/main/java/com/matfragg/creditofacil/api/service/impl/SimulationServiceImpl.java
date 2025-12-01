@@ -188,6 +188,20 @@ public class SimulationServiceImpl implements SimulationService {
                 .subtract(govBondAmount)
                 .subtract(pbpAmount); // PBP reduce el saldo de deuda
 
+        // ==================== CAPITALIZAR GASTOS INICIALES ====================
+        // Los gastos iniciales se suman al monto a financiar (como en tu Excel)
+        // "Monto del préstamo" = Saldo a financiar + Gastos iniciales
+        BigDecimal initialCosts = request.getOpeningCommission()
+                .add(request.getNotaryFees())
+                .add(request.getRegistrationFees());
+        
+        // Monto del préstamo indexado (incluye gastos capitalizados)
+        BigDecimal loanAmount = amountToFinance.add(initialCosts);
+        
+        log.info("Saldo a financiar: {}, Gastos capitalizados: {}, Monto préstamo: {}", 
+                amountToFinance, initialCosts, loanAmount);
+        // ==================== FIN CAPITALIZACIÓN ====================
+
         // 8. VALIDAR MONTO A FINANCIAR
         if (!downPaymentValidator.isFinancingAmountValid(
                 request.getPropertyPrice(), 
@@ -222,9 +236,9 @@ public class SimulationServiceImpl implements SimulationService {
         }
         // ==================== FIN DESGRAVAMEN ====================
         
-        // 11. Generar cronograma de pagos (ahora incluye desgravamen)
+        // 11. Generar cronograma de pagos usando el monto del préstamo (con gastos capitalizados)
         List<PaymentSchedule> schedule = frenchMethodCalculator.calculatePaymentSchedule(
-                amountToFinance,
+                loanAmount,  // ← CAMBIO: Usar monto con gastos capitalizados
                 request.getAnnualRate(),
                 request.getTermYears(),
                 settings,
@@ -242,13 +256,13 @@ public class SimulationServiceImpl implements SimulationService {
             monthlyPayment = schedule.get(0).getPayment();
         }
 
-        // 13. Calcular seguros y total mensual (actualizado para desgravamen)
+        // 13. Calcular seguros y total mensual (usando loanAmount para seguros)
         BigDecimal lifeInsurance = request.getLifeInsuranceRate()
-            .multiply(amountToFinance)
+            .multiply(loanAmount)  // ← CAMBIO: Usar loanAmount
             .setScale(2, RoundingMode.HALF_UP);
         BigDecimal propertyInsurance = request.getPropertyInsurance();
         BigDecimal desgravamenFirst = desgravamenRate
-            .multiply(amountToFinance)
+            .multiply(loanAmount)  // ← CAMBIO: Usar loanAmount
             .setScale(2, RoundingMode.HALF_UP);
         
         BigDecimal totalMonthlyPayment = monthlyPayment
@@ -256,14 +270,18 @@ public class SimulationServiceImpl implements SimulationService {
             .add(propertyInsurance)
             .add(desgravamenFirst); // Incluir desgravamen
 
-        BigDecimal additionalCosts = request.getOpeningCommission()
-            .add(request.getNotaryFees())
-            .add(request.getRegistrationFees());
+        // Los gastos adicionales ya están capitalizados, no se suman aparte para TCEA
+        BigDecimal additionalCosts = initialCosts;
 
         // 14. Calcular indicadores financieros
-        BigDecimal van = financialIndicatorsService.calculateVAN(amountToFinance, schedule, null);
-        BigDecimal tir = financialIndicatorsService.calculateTIR(amountToFinance, schedule);
-        BigDecimal tcea = financialIndicatorsService.calculateTCEA(amountToFinance, schedule, additionalCosts);
+        // Usar tasa de descuento del request o default 10%
+        BigDecimal discountRate = request.getDiscountRate();
+        if (discountRate == null) {
+            discountRate = BigDecimal.TEN; // Default 10%
+        }
+        BigDecimal van = financialIndicatorsService.calculateVAN(loanAmount, schedule, discountRate);
+        BigDecimal tir = financialIndicatorsService.calculateTIR(loanAmount, schedule);
+        BigDecimal tcea = financialIndicatorsService.calculateTCEA(loanAmount, schedule, additionalCosts);
 
         // 15. Calcular totales
         int loanTermMonths = request.getTermYears() * 12;
@@ -317,6 +335,7 @@ public class SimulationServiceImpl implements SimulationService {
                 .propertyPrice(propertyPrice)
                 .downPayment(downPayment)
                 .amountToFinance(amountToFinance)
+                .loanAmount(loanAmount)
                 .applyGovernmentBonus(request.getApplyGovernmentBonus())
                 .governmentBonusAmount(govBondAmount)
                 .bonusType(request.getBonusType())
@@ -341,6 +360,7 @@ public class SimulationServiceImpl implements SimulationService {
                 .loanTermMonths(loanTermMonths)
                 .totalLifeInsurance(totalLifeInsurance.setScale(2, RoundingMode.HALF_UP))
                 .totalPropertyInsurance(totalPropertyInsurance.setScale(2, RoundingMode.HALF_UP))
+                .discountRate(discountRate)
                 .npv(van)
                 .irr(tir)
                 .tcea(tcea)
@@ -380,7 +400,11 @@ public class SimulationServiceImpl implements SimulationService {
 
     // ✅ ASIGNAR TODOS LOS CAMPOS CALCULADOS
     simulation.setAmountToFinance(calculated.getAmountToFinance());
+    simulation.setLoanAmount(calculated.getLoanAmount()); // ✅ MONTO PRÉSTAMO (con gastos capitalizados)
     simulation.setGovernmentBonusAmount(calculated.getGovernmentBonusAmount()); // ✅ BONO
+    simulation.setPbpAmount(calculated.getPbpAmount()); // ✅ PBP
+    simulation.setApplyPBP(calculated.getApplyPBP()); // ✅ APPLY PBP
+    simulation.setDiscountRate(calculated.getDiscountRate()); // ✅ TASA DESCUENTO
     simulation.setMonthlyPayment(calculated.getMonthlyPayment());
     simulation.setTotalMonthlyPayment(calculated.getTotalMonthlyPayment()); // ✅ TOTAL MENSUAL
     simulation.setTotalAmountToPay(calculated.getTotalAmountToPay()); // ✅ TOTAL A PAGAR
@@ -389,6 +413,7 @@ public class SimulationServiceImpl implements SimulationService {
     simulation.setLoanTermMonths(calculated.getLoanTermMonths()); // ✅ MESES
     simulation.setTotalLifeInsurance(calculated.getTotalLifeInsurance()); // ✅ SEGURO VIDA
     simulation.setTotalPropertyInsurance(calculated.getTotalPropertyInsurance()); // ✅ SEGURO PROPIEDAD
+    simulation.setTotalDesgravamenInsurance(calculated.getTotalDesgravamenInsurance()); // ✅ DESGRAVAMEN TOTAL
     simulation.setNpv(calculated.getNpv());
     simulation.setIrr(calculated.getIrr());
     simulation.setTcea(calculated.getTcea());
@@ -420,7 +445,11 @@ public class SimulationServiceImpl implements SimulationService {
         // Recalcular valores
         SimulationResponse recalculated = calculate(request);
         simulation.setAmountToFinance(recalculated.getAmountToFinance());
+        simulation.setLoanAmount(recalculated.getLoanAmount()); // MONTO PRÉSTAMO
         simulation.setGovernmentBonusAmount(recalculated.getGovernmentBonusAmount());
+        simulation.setPbpAmount(recalculated.getPbpAmount());
+        simulation.setApplyPBP(recalculated.getApplyPBP());
+        simulation.setDiscountRate(recalculated.getDiscountRate());
         simulation.setMonthlyPayment(recalculated.getMonthlyPayment());
         simulation.setTotalMonthlyPayment(recalculated.getTotalMonthlyPayment());
         simulation.setTotalAmountToPay(recalculated.getTotalAmountToPay());
@@ -429,6 +458,7 @@ public class SimulationServiceImpl implements SimulationService {
         simulation.setLoanTermMonths(recalculated.getLoanTermMonths());
         simulation.setTotalLifeInsurance(recalculated.getTotalLifeInsurance());
         simulation.setTotalPropertyInsurance(recalculated.getTotalPropertyInsurance());
+        simulation.setTotalDesgravamenInsurance(recalculated.getTotalDesgravamenInsurance());
         simulation.setTcea(recalculated.getTcea());
         simulation.setNpv(recalculated.getNpv());
         simulation.setIrr(recalculated.getIrr());

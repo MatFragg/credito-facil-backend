@@ -67,20 +67,35 @@ public class DownPaymentValidationService {
      * @return Monto del PBP (S/ 6,400, S/ 17,700, o S/ 0 si no califica)
      */
     public BigDecimal calculatePBPAmount(BigDecimal propertyPrice, BankEntity bankEntity) {
-        BigDecimal ncmvMin = bankEntity.getNcmvMinPropertyValue();
-        BigDecimal pbpThreshold = bankEntity.getPbpThresholdLow();
-        BigDecimal ncmvMax = bankEntity.getNcmvMaxPropertyValue();
+        // Valores por defecto según normativa NCMV
+        BigDecimal ncmvMin = bankEntity.getNcmvMinPropertyValue() != null 
+                ? bankEntity.getNcmvMinPropertyValue() 
+                : BigDecimal.valueOf(68800);
+        BigDecimal pbpThreshold = bankEntity.getPbpThresholdLow() != null 
+                ? bankEntity.getPbpThresholdLow() 
+                : BigDecimal.valueOf(102900); // Umbral estándar NCMV
+        BigDecimal ncmvMax = bankEntity.getNcmvMaxPropertyValue() != null 
+                ? bankEntity.getNcmvMaxPropertyValue() 
+                : BigDecimal.valueOf(362100);
+        
+        // Valores de PBP por defecto si no están configurados
+        BigDecimal pbpStandard = bankEntity.getPbpAmountStandard() != null 
+                ? bankEntity.getPbpAmountStandard() 
+                : BigDecimal.valueOf(6400);
+        BigDecimal pbpPlus = bankEntity.getPbpAmountPlus() != null 
+                ? bankEntity.getPbpAmountPlus() 
+                : BigDecimal.valueOf(17700);
         
         // PBP Standard: S/ 68,800 - S/ 102,900 → S/ 6,400
         if (propertyPrice.compareTo(ncmvMin) >= 0 && propertyPrice.compareTo(pbpThreshold) < 0) {
             log.debug("PBP Standard aplicable - Vivienda en rango S/ {} - S/ {}", ncmvMin, pbpThreshold);
-            return bankEntity.getPbpAmountStandard();
+            return pbpStandard;
         }
         
         // PBP Plus: S/ 102,900 - S/ 362,100 → S/ 17,700
         if (propertyPrice.compareTo(pbpThreshold) >= 0 && propertyPrice.compareTo(ncmvMax) <= 0) {
             log.debug("PBP Plus aplicable - Vivienda en rango S/ {} - S/ {}", pbpThreshold, ncmvMax);
-            return bankEntity.getPbpAmountPlus();
+            return pbpPlus;
         }
         
         log.debug("PBP no aplicable para vivienda de S/ {}", propertyPrice);

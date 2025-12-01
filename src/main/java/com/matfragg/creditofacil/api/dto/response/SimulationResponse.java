@@ -35,6 +35,7 @@ public class SimulationResponse {
     private BigDecimal propertyPrice;
     private BigDecimal downPayment;
     private BigDecimal amountToFinance;
+    private BigDecimal loanAmount;  // amountToFinance + gastos iniciales capitalizados
     private Boolean applyGovernmentBonus;
     private BigDecimal governmentBonusAmount;
     private BonusType bonusType;  // Agregar
@@ -57,6 +58,7 @@ public class SimulationResponse {
     private Integer loanTermMonths;  // Agregar
     private BigDecimal totalLifeInsurance;  // Agregar si se calcula
     private BigDecimal totalPropertyInsurance;  // Agregar si se calcula
+    private BigDecimal discountRate; // Tasa de descuento usada para VAN
     private BigDecimal npv;
     private BigDecimal irr;
     private BigDecimal tcea;
